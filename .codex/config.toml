@@ -1,0 +1,17 @@
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 2
+default_subagent_model = "gpt-5.6-luna"
+default_subagent_reasoning_effort = "medium"
+
+[agents.luna_researcher]
+description = "Collect only the evidence needed for a specific Astra decision, without rebuilding full project context."
+config_file = "agents/luna_researcher.toml"
+
+[agents.terra_executor]
+description = "Implement and self-verify one bounded Astra work packet."
+config_file = "agents/terra_executor.toml"
+
+[agents.sol_gate_reviewer]
+description = "Review stable phase evidence only when Astra requests a phase gate."
+config_file = "agents/sol_gate_reviewer.toml"

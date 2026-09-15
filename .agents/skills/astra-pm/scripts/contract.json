@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "lifecycle": {
+    "skill_required": [
+      "Use Luna for one decision question, Terra for one acceptance gate, and Sol for one stable phase-gate review"
+    ],
+    "skill_forbidden": [
+      "Reuse one live instance of each role per phase"
+    ],
+    "reference_required": [
+      "Reuse one Terra within a gate"
+    ]
+  },
+  "enums": {
+    "gate_verdict": [
+      "PASS",
+      "PASS_WITH_CONDITIONS",
+      "BLOCK"
+    ],
+    "status": {
+      "luna_researcher": [
+        "done",
+        "blocked",
+        "failed"
+      ],
+      "terra_executor": [
+        "done",
+        "waiting",
+        "blocked",
+        "failed"
+      ],
+      "sol_gate_reviewer": [
+        "done",
+        "blocked",
+        "failed"
+      ]
+    }
+  },
+  "profiles": {
+    "luna_researcher": {
+      "config_file": "agents/luna_researcher.toml",
+      "fields": [
+        "status",
+        "evidence",
+        "files_changed",
+        "commands_and_exit_codes",
+        "assumptions",
+        "unresolved_risks",
+        "recommendation"
+      ]
+    },
+    "terra_executor": {
+      "config_file": "agents/terra_executor.toml",
+      "fields": [
+        "status",
+        "evidence",
+        "files_changed",
+        "commands_and_exit_codes",
+        "assumptions",
+        "unresolved_risks",
+        "wait_contract",
+        "recommendation"
+      ]
+    },
+    "sol_gate_reviewer": {
+      "config_file": "agents/sol_gate_reviewer.toml",
+      "fields": [
+        "status",
+        "evidence",
+        "files_changed",
+        "commands_and_exit_codes",
+        "assumptions",
+        "unresolved_risks",
+        "recommendation"
+      ]
+    }
+  },
+  "mirrors": {
+    "language": "Use English for every message, status update, evidence report, and packet sent to another agent.",
+    "interrupt": "Treat `send_message` as an interrupt, not a progress stream. Use it only when Astra must act before safe work can continue. Do not send routine progress or duplicate the final report. Do not wait for Astra; return one precise blocker when parent action is required."
+  }
+}
