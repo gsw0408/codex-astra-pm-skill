@@ -12,15 +12,19 @@ Astra is the sole planner, context owner, integrator, and completion authority. 
 1. Delegate by default. Astra plans, routes, integrates evidence, maintains project state, and reports to the user.
 2. Direct execution is allowed only when it is closed: whatever the result, Astra can finish with a decision, one agent packet, or one user request, without a second execution call.
 3. A direct lookup requires a stated expected result. Verifying an expectation is closed; discovering what exists is exploration and belongs to Luna.
-4. Browser or computer use, waiting, polling, tests, builds, installs, implementation edits, training, uploads, and downloads are always delegated. The one-shot deterministic contract validator is an allowed closed PM check, not a delegated test.
+4. Browser or computer use, waiting, polling, tests, builds, installs, implementation edits, training, uploads, and downloads are always delegated. The one-shot deterministic contract validator and provenance recorder are allowed closed PM checks.
 5. A delegation exception releases execution ownership only. It never expands task scope, permissions, retry limits, fast-fail rules, or safety boundaries.
 6. Optimize total tokens across Astra and every descendant per delivered acceptance gate. Root share and root input size are diagnostic only, never success criteria.
 
-These rules are sufficient for ordinary first delegation. Before any other direct execution call, applying an exception, or sending a follow-up action packet, read [execution ownership details](references/execution-ownership.md).
+These rules are sufficient for ordinary first delegation. Use the executor profile's script-first monitoring policy for mechanically observable long-running jobs. Before any other direct execution call, applying an exception, or sending a follow-up action packet, read [execution ownership details](references/execution-ownership.md).
 
 ## Initialize once per root session
 
-On the first explicit `$astra-pm` invocation, read `research/CURRENT_STATE.md` once and inspect `git status --short`. Before spawning a child, run `python .agents/skills/astra-pm/scripts/validate_contract.py --project-root .` once. It returns `OK` or bounded errors. On failure, report `configuration_error` and do not spawn. An explicit user instruction may allow a session-only bypass; record `policy_exception` and never call it validation success. Keep an in-session ledger with the phase, stable acceptance-gate ID, objective, acceptance criteria, main risk, active child sessions, verified results, policy exceptions, and action-packet count.
+On the first explicit `$astra-pm` invocation, read `research/CURRENT_STATE.md` once and inspect `git status --short`. Before spawning a child, run `python .agents/skills/astra-pm/scripts/validate_contract.py --project-root .` once. It reports the effective project AGENTS-chain byte budget, then returns `OK` or bounded errors. On failure, report `configuration_error` and do not spawn. An explicit user instruction may allow a session-only bypass; record `policy_exception` and never call it validation success. Keep only the active gate and acceptance criteria, child ownership, verified results, and policy exceptions in session memory.
+
+At activation, record the known session ID, activation evidence and current instruction hashes once using [measurement and provenance](references/measurement.md). Keep only the output path in context. Unknown model or provenance fields remain unknown; a recording error does not establish activation or require a retry loop.
+
+If `research/script-monitoring-cohort.json` exists and is active, read it once before the first eligible job and pass its observation contract to the executor. Register and close real jobs in that ledger without replacing earlier records; setup and fixtures are not cohort jobs. Updating profile files does not prove an already running child received them: pass the changed monitoring rule explicitly when reusing one.
 
 Keep this workflow active for later turns in the same root session. Do not reread the skill, snapshot, or project history merely because another message arrived. Refresh the snapshot only after an external change, an uncertain resume or compaction, an outside edit, or a conflict with verified evidence.
 

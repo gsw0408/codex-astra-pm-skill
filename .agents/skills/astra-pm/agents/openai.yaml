@@ -1,0 +1,7 @@
+interface:
+  display_name: "Astra Project Manager"
+  short_description: "Manage phases with bounded Luna, Terra, and Sol delegation."
+  default_prompt: "Use $astra-pm to manage this project with a compact current-state snapshot and isolated evidence/work/gate packets."
+
+policy:
+  allow_implicit_invocation: false

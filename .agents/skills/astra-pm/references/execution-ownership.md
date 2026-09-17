@@ -4,15 +4,11 @@ Read this reference only when Astra is considering direct execution beyond norma
 
 ## Acceptance gate boundary
 
-Default to one acceptance gate per user request. Preparation, execution, monitoring, persistence, and verification of one deliverable remain one workstream. A split must be declared before execution and have independently reportable acceptance criteria. Never split or rename a gate retroactively to reset ownership or packet accounting.
+Default to one acceptance gate per user request. Preparation, execution, monitoring, persistence, and verification of one deliverable remain one workstream. A split must be declared before execution and have independently reportable acceptance criteria. Never split or rename a gate retroactively to reset ownership or rewrite the record.
 
-## Total-cost objective and baseline
+## Conditional cost review
 
-The primary efficiency measure is `total_session_tokens_per_delivered_gate`: total recorded tokens for Astra and every descendant, including work on blocked or failed gates, divided by the number of acceptance gates declared before execution and delivered to their acceptance criteria. Always retain the raw session total and gate outcomes beside the quotient. Root share, root maximum input, and cached-input percentage are diagnostic only and must not be used to claim efficiency.
-
-The 2026-09-14 RVC session recorded 44,444,547 total tokens. Two retrospectively identifiable user-visible outcomes were delivered: the first-VC human-quality decision and the target194 calibration-20/Version3 observed-output outcome. The provisional historical quotient is therefore 22,222,274 tokens per delivered gate. The second outcome retained a saved-byte verification risk, and gate IDs were not declared before execution, so this quotient is a comparison baseline rather than a pass/fail target. The blocked target187 Version4 persistence work remains in the numerator. Never improve this baseline by retroactively splitting work into more gates.
-
-For future runs, record cumulative root and descendant token totals at each predeclared gate's start and terminal outcome. Prefer the actual per-gate token delta over evenly dividing the whole session when those deltas are available.
+Review efficiency only after a concrete regression or unusually high context use. Compare total root-and-descendant tokens per predeclared delivered gate and retain the raw total and gate outcomes. Never improve the result by retroactively splitting or renaming a gate.
 
 ## Inter-agent event protocol
 
@@ -52,7 +48,7 @@ If any result could make Astra inspect again, retry, modify, test, wait, poll, o
 
 A direct lookup is allowed only when Astra states the expected result before the call. Checking that a reported artifact exists at its declared path, comparing a hash with a supplied value, or confirming an expected scoped Git state is verification. Listing directories, searching broadly, opening files to discover their contents, or checking an unspecified state is exploration and belongs to Luna.
 
-Normal direct operations are limited to the one-time startup snapshot, one-shot Astra PM contract validation, a bounded check of submitted child evidence or a scoped diff, an expectation-backed deterministic lookup, a gate decision, and PM-owned compact-state maintenance. Tests, builds, implementation edits, browser or computer use, cloud operations, training, installs, uploads, downloads, waiting, and polling belong to Terra. Research and exploration belong to Luna.
+Normal direct operations are limited to the one-time startup snapshot, one-shot Astra PM contract validation and provenance recording, a bounded check of submitted child evidence or a scoped diff, an expectation-backed deterministic lookup, a gate decision, and PM-owned compact-state maintenance. Tests, builds, implementation edits, browser or computer use, cloud operations, training, installs, uploads, downloads, waiting, and polling belong to Terra. Research and exploration belong to Luna.
 
 ## Delegation exception
 
@@ -62,24 +58,8 @@ When the exception applies, tell the user in one line and record `policy_excepti
 
 The exception changes execution ownership only. It does not expand the user's requested outcome, granted permissions, destructive or remote authority, retry limits, observation-compression rules, fast-fail rules, or any other safety boundary.
 
-Under an exception, do not replace an unavailable child with an unbounded direct loop. For long-running work, use a compact status artifact with an explicit terminal state and return only state transitions upstream. Do not reread logs that repeat that state. Check at most twice before the expected completion time and once after it. After two failures of the same UI action or operation, stop that path and request user help when a brief user action is the shortest route; otherwise report the precise blocker.
+Under an exception, do not replace an unavailable child with an unbounded direct loop. Apply the script-first monitoring and bounded LLM fallback policy in `.codex/agents/terra_executor.toml`; the exception does not change monitoring, retry, or recovery authority. After two failures of the same UI action or operation, stop that path and request user help when a brief user action is the shortest route; otherwise report the precise blocker.
 
-## Action-packet accounting
+## Follow-up packets
 
-Track `astra_action_packets_per_gate` against the stable acceptance-gate ID, not a child session, role instance, filename, or phase label. Replacing a child or renaming work does not reset it.
-
-Count the initial work packet and every later packet that requests correction, additional implementation, or re-execution. Do not count passive status transitions, cancellation, or a relayed user message that requests no agent action.
-
-Classify each packet reason as `initial`, `packet_gap`, `implementation_failure`, `reviewer_finding`, `new_external_evidence`, or `user_scope_change`. A third packet caused by `packet_gap` or `implementation_failure` indicates that the initial packet or executor discretion was too narrow. Before sending it, consolidate all known corrections and expand Terra's implementation discretion only within the existing acceptance criteria, forbidden areas, and user-granted authority. Never broaden external permissions or the requested outcome.
-
-## Post-run signals
-
-Evaluate cost only after the workstream rather than polling usage during execution. The primary measure is total recorded tokens across root and descendants per delivered predeclared gate, with the raw total and each gate outcome retained.
-
-For the next long browser verification, inspect these three causal signals first:
-
-- Terra maximum input as a percentage of its recorded context window;
-- total serialized browser-return characters;
-- Terra compaction count.
-
-Child upstream interrupts, root and child wait calls, action packets, and root share may explain a regression, but they are secondary diagnostics. Do not use a lower Astra share to claim improvement when total cost per delivered gate rises. Do not poll session logs during work merely to calculate these values.
+Consolidate known corrections into one packet. If repeated follow-ups show that the initial packet or executor discretion was too narrow, revise it only within the existing acceptance criteria, forbidden areas, and user-granted authority. Replacing a child or renaming work does not remove responsibility for unresolved corrections.

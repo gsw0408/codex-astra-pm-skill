@@ -6,9 +6,6 @@
     ],
     "skill_forbidden": [
       "Reuse one live instance of each role per phase"
-    ],
-    "reference_required": [
-      "Reuse one Terra within a gate"
     ]
   },
   "enums": {
