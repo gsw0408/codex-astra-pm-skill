@@ -72,3 +72,47 @@ The Codespace fast-forwarded from `d05b239` to `6e52dc3` with
 `git pull --ff-only`. It committed and pushed this section as `4051ed6`.
 The notebook then fast-forwarded from `6e52dc3` to `4051ed6` with
 `git pull --ff-only origin main`; unrelated local changes remained untouched.
+
+## CLI SSH repair and shared-resume preflight
+
+On 2026-09-23 UTC, `gh codespace ssh -c zany-fishstick-x5w7gpr44gjv25g6
+-- pwd` initially exited 1 with `failed to start SSH server`. Inside the
+Codespace, a boolean-only check found `sshd_installed=false`. The existing
+devcontainer had only the Node feature. Commit `a9c1648` added the official
+`ghcr.io/devcontainers/features/sshd:1` feature, left the Python image,
+Node 22, post-create script, and Studio port unchanged, and added a static
+configuration test. The Codespace fast-forwarded to that commit and was
+rebuilt without a full rebuild.
+
+After the rebuild, `sshd_installed=true`, and the same notebook command
+exited 0 with `/home/vscode`; it still worked after a later stop/start. Over
+that SSH connection, the Codespace reported commit `a9c1648`, Python
+3.11.16, Node 22.23.2, and Codex CLI 0.156.1. Its committed test suite ran
+87 tests with `OK`. A new scripted dry-run reported `PASS`, 16/16 checks,
+zero Codex/model and network calls, and no real training or experiment.
+The relevant Windows Codespaces/shared-resume tests ran 10 tests with `OK`.
+The broader Windows suite ran 153 tests but had two errors: one in an
+uncommitted monitoring test and one transient Windows file-access error in
+the shared-resume test; that shared-resume test passed when rerun in the
+targeted suite. These broader errors are not claimed as fixed by the SSH
+change.
+
+The real PostgreSQL handoff probe started locally under run ID
+`d376e8f4-9322-4a58-927c-bd6a6a0f732d` and reached `PAUSED_USER` with one
+completed synthetic receipt and zero model calls. The Codespace continuation
+has **not** run: after a rebuild and a subsequent complete stop/start, a
+boolean-only Codespace terminal check still reported `secret_present=True`,
+`ssl_required=True`, `direct_endpoint=False` for
+`ASTRA_STATE_DATABASE_URL`. A later structural check found
+`assignment_prefix=True`, `host_present=False`, and `pooled_endpoint=False`:
+the GitHub Secret Value included the redundant `ASTRA_STATE_DATABASE_URL=`
+prefix rather than containing only the URL. The local ignored `.env` reported
+a direct SSL endpoint. No connection string or credential was printed. A
+noninteractive `gh codespace ssh -- COMMAND` shell did not inherit the
+Codespaces Secret, although the VS Code terminal did. The probe must use the
+Codespace terminal after its Secret Value is corrected to a direct URL.
+
+`codex login status` reported `Not logged in` in both SSH and the VS Code
+terminal after the rebuild. ChatGPT device authentication must be completed
+again by the user before live role execution; no credentials were copied or
+committed. This authentication gap does not affect the no-model tests above.

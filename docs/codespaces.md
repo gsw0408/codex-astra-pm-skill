@@ -26,7 +26,9 @@ model silently if the account cannot use one.
    `LANGSMITH_TRACING=true` and, optionally, `LANGSMITH_PROJECT` there too.
    For cross-machine orchestration, also set `ASTRA_STATE_DATABASE_URL` to
    the new private PostgreSQL database's **direct** SSL connection URL and
-   restart the Codespace so the secret reaches its environment. Set the same
+   restart the Codespace so the secret reaches its environment. The Secret's
+   **Name** is `ASTRA_STATE_DATABASE_URL`; its **Value** must begin with
+   `postgresql://`, not `ASTRA_STATE_DATABASE_URL=postgresql://`. Set the same
    variable in the notebook's ignored `.env`; never paste it into chat.
    Without a key, the orchestration and Studio topology preview still run;
    remote LangSmith traces do not upload. Never commit a populated `.env` or
@@ -52,7 +54,9 @@ codex login status
 For local CLI access, run `gh codespace ssh -c CODESPACE_NAME -- pwd` from the
 notebook after the Codespace is running. If the SSH feature was added to an
 existing Codespace, rebuild that Codespace once to apply the devcontainer
-change; stopping and starting alone does not install the feature.
+change; stopping and starting alone does not install the feature. A rebuild
+can clear Codex CLI's host-local login, so check `codex login status` afterward
+and complete ChatGPT device authentication again if needed.
 
 Codex login is a separate **human** action. Prefer ChatGPT account sign-in;
 in a headless Codespace use `codex login --device-auth` if your account or
@@ -114,6 +118,11 @@ the database lock rejects two simultaneous controllers. Git-pull the same
 project commit first, and arrange separate storage for any required large
 datasets or evidence. Credentials still remain host-local and must be set up
 independently in the Codespace.
+
+In the verified Codespace, GitHub Codespaces Secrets were present in the VS
+Code terminal but not in a noninteractive `gh codespace ssh -- COMMAND` shell.
+Use the Codespace terminal for shared `start`/`resume` commands and check that
+`ASTRA_STATE_DATABASE_URL` is available there; do not print its value.
 
 Repository code uses the launch `--project-root` and the specification's
 relative paths; no Windows `D:\\...` path is required by the runtime. Supply
