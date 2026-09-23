@@ -28,6 +28,7 @@ from .codex_cli import (
     Backend,
     BackendResult,
     BackendUsageLimitExceeded,
+    CodexCliBackend,
     FIXED_ROLE_SETTINGS,
     USAGE_LIMIT_FAILURE_KIND,
 )
@@ -50,6 +51,7 @@ from .schema import (
     validate_sol_result,
     validate_user_response,
 )
+from .shared import MirroredSqliteSaver, SharedRunStore, SharedStateError
 
 
 RuntimeState = WorkflowState
@@ -300,11 +302,14 @@ class OrchestrationRuntime:
     """One single-controller, restart-safe orchestration thread."""
 
     def __init__(
-        self, run_dir: Path, backend: Backend, *, observer: LangSmithObserver | None = None
+        self, run_dir: Path, backend: Backend, *, observer: LangSmithObserver | None = None,
+        shared_store: SharedRunStore | None = None,
+        project_root: Path | None = None,
     ):
         os.environ.setdefault("LANGGRAPH_STRICT_MSGPACK", "true")
         self.audit = AuditLog.open(run_dir)
         self.backend = backend
+        self.shared_store = shared_store
         self.observer = observer if observer is not None else LangSmithObserver(
             role_settings=getattr(backend, "role_settings", FIXED_ROLE_SETTINGS)
         )
@@ -313,14 +318,21 @@ class OrchestrationRuntime:
             raise ValueError(
                 f"unsupported orchestration manifest schema_version; expected {SCHEMA_VERSION}"
             )
-        project_root = Path(str(manifest["project_root"])).resolve()
-        if self.audit.run_dir == project_root or self.audit.run_dir.is_relative_to(project_root):
+        effective_root = (project_root or Path(str(manifest["project_root"]))).resolve()
+        self.project_root = effective_root
+        roots_path = self.audit.run_dir / "host-roots.json"
+        self.known_roots = read_json(roots_path)["roots"] if roots_path.is_file() else [str(effective_root)]
+        if self.audit.run_dir == effective_root or self.audit.run_dir.is_relative_to(effective_root):
             raise ValueError(
                 "run_dir must be outside project_root so Sol cannot modify controller evidence"
             )
         self.checkpoint_path = self.audit.run_dir / "checkpoint.sqlite"
         self.connection = sqlite3.connect(self.checkpoint_path, check_same_thread=False)
-        self.checkpointer = SqliteSaver(self.connection)
+        if shared_store is not None:
+            shared_store.sqlite_connection = self.connection
+            self.checkpointer = MirroredSqliteSaver(self.connection, shared_store)
+        else:
+            self.checkpointer = SqliteSaver(self.connection)
         self.graph = self._build_graph()
         self.run_id = str(manifest["run_id"])
         self.config = {"configurable": {"thread_id": self.run_id}}
@@ -340,9 +352,34 @@ class OrchestrationRuntime:
         node: Callable[[RuntimeState], dict[str, Any]],
     ) -> dict[str, Any]:
         with self.observer.role(role, state):
-            updates = node(state)
+            updates = node(self._local_state(state))
             self.observer.finish_role(role, updates)
             return updates
+
+    def _local_state(self, state: RuntimeState) -> RuntimeState:
+        """Project paths are host-local; scientific goals and checkpoint IDs are not."""
+        if self.shared_store is None:
+            return state
+
+        def rebase(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {key: rebase(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [rebase(item) for item in value]
+            if not isinstance(value, str):
+                return value
+            for root in sorted(self.known_roots, key=len, reverse=True):
+                old = root.rstrip("/\\") or root
+                comparison = value.lower() if re.match(r"^[A-Za-z]:[\\/]", old) else value
+                prefix = old.lower() if re.match(r"^[A-Za-z]:[\\/]", old) else old
+                if comparison == prefix:
+                    return str(self.project_root)
+                if comparison.startswith(prefix + "/") or comparison.startswith(prefix + "\\"):
+                    suffix = value[len(old):].lstrip("/\\")
+                    return str(self.project_root.joinpath(*re.split(r"[/\\]+", suffix)))
+            return value
+
+        return rebase(dict(state))
 
     def _observed_call_session_id(self, call_id: str, role: str) -> str | None:
         path = self.audit.call_dir(call_id) / "process.json"
@@ -485,8 +522,12 @@ class OrchestrationRuntime:
             "requested_session_id": requested_session,
             "state_step": state.get("step_count", 0),
         }
+        if self.shared_store is not None and requested_session and isinstance(self.backend, CodexCliBackend):
+            self.shared_store.ensure_session(requested_session)
         directory = self.audit.prepare_call(call_id, role, request, output_schema)
         self.audit.mark_call_running(call_id)
+        if self.shared_store is not None:
+            self.shared_store.save()
         try:
             if role == "astra":
                 backend_result = self.backend.run_astra(
@@ -515,11 +556,22 @@ class OrchestrationRuntime:
             ):
                 raise ValueError(f"{role} backend returned an invalid session id")
             validated = validator(backend_result.output)
+            if self.shared_store is not None and role in {"astra", "sol"}:
+                exported = self.shared_store.save_session(backend_result.session_id)
+                if not exported and isinstance(self.backend, CodexCliBackend):
+                    self.audit.append_event(
+                        "CODEX_SESSION_ROLLOUT_UNAVAILABLE",
+                        {"role": role, "session_id": backend_result.session_id},
+                    )
             receipt = self.audit.finish_call(
                 call_id, validated, _call_receipt(backend_result, role, backend_result.mode)
             )
+            if self.shared_store is not None:
+                self.shared_store.save()
             self.observer.record_call(call_id, receipt)
             return validated, receipt, call_id
+        except SharedStateError:
+            raise
         except BackendUsageLimitExceeded as error:
             failure = {
                 "error_type": type(error).__name__,
@@ -529,6 +581,8 @@ class OrchestrationRuntime:
                 "terminal_stop_code": USAGE_LIMIT_STOP_CODE,
             }
             self.audit.fail_call(call_id, failure, ambiguous=role == "sol")
+            if self.shared_store is not None:
+                self.shared_store.save()
             self.observer.record_error(
                 call_id, type(error).__name__, self._observed_call_session_id(call_id, role)
             )
@@ -544,6 +598,8 @@ class OrchestrationRuntime:
                 {"error_type": type(error).__name__, "message": str(error)},
                 ambiguous=role == "sol",
             )
+            if self.shared_store is not None:
+                self.shared_store.save()
             self.observer.record_error(
                 call_id, type(error).__name__, self._observed_call_session_id(call_id, role)
             )
@@ -1216,6 +1272,20 @@ class OrchestrationRuntime:
         package = state.get("review_package")
         if not package:
             return self._terminal_failure(state, "REVIEW", "REVIEW route has no frozen package")
+        if self.shared_store is not None:
+            original_path = self.audit.review_dir(package["review_id"]) / "packet.json"
+            if original_path.is_file() and read_json(original_path) != package:
+                host_view = {
+                    "original_packet_sha256": sha256_file(original_path),
+                    "host_project_root": str(self.project_root),
+                    "execution_package": package,
+                }
+                digest = sha256_bytes(canonical_json(host_view))
+                view_path = original_path.parent / f"execution-packet-{digest[:16]}.json"
+                if not view_path.exists():
+                    write_json_exclusive(view_path, host_view)
+                elif sha256_file(view_path) != digest:
+                    raise AmbiguousCallError("review host-view packet conflicts with saved evidence")
         call_id = ""
         observed_session: str | None = None
         try:
@@ -1362,6 +1432,8 @@ class OrchestrationRuntime:
 
     def close(self) -> None:
         self.connection.close()
+        if self.shared_store is not None and self.shared_store.sqlite_connection is self.connection:
+            self.shared_store.sqlite_connection = None
 
     def __enter__(self) -> "OrchestrationRuntime":
         return self

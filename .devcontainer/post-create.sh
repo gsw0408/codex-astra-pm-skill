@@ -5,7 +5,7 @@ project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_dir"
 
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -e '.[studio]'
+.venv/bin/python -m pip install -e '.[studio,shared]'
 npm install -g @openai/codex@0.156.1
 
 # LangGraph's Studio config references .env. Codespaces Secrets remain in the

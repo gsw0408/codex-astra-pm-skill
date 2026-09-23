@@ -3,7 +3,7 @@
 This is a temporary Linux work PC for the existing orchestrator, not a
 24-hour service or a new scientific workflow. The same Git commit should run
 on the Windows notebook and in a Codespace. The dev container uses Python
-3.11, Node.js 22, and the repository's `.[studio]` dependency group; its
+3.11, Node.js 22, and the repository's `.[studio,shared]` dependency groups; its
 post-create step installs Codex CLI. No model, dataset, or experiment is run
 during setup.
 The pinned Codex CLI version is `0.156.1`, which includes the GPT-6 Sol/Luna
@@ -22,6 +22,10 @@ model silently if the account cannot use one.
 2. In GitHub's repository or account Codespaces Secrets, configure
    `LANGSMITH_API_KEY` if remote tracing is desired. Set
    `LANGSMITH_TRACING=true` and, optionally, `LANGSMITH_PROJECT` there too.
+   For cross-machine orchestration, also set `ASTRA_STATE_DATABASE_URL` to
+   the new private PostgreSQL database's **direct** SSL connection URL and
+   restart the Codespace so the secret reaches its environment. Set the same
+   variable in the notebook's ignored `.env`; never paste it into chat.
    Without a key, the orchestration and Studio topology preview still run;
    remote LangSmith traces do not upload. Never commit a populated `.env` or
    copy authentication files from the notebook.
@@ -92,15 +96,17 @@ again before leaving the Codespace, then pull on the notebook. Inspect
 worktree contains private or large artifacts. The existing branch workflow is
 sufficient unless concurrent edits make a separate branch useful.
 
-Git transports committed files, **not** a running orchestrator session.
-SQLite checkpoints, Codex session IDs, credentials, and ignored run directories
-stay on the machine where they were created. Resume a paused run on that same
-machine with its original `--run-dir`; do not start a second run against the
-same project state or assume `git pull` transferred an in-flight checkpoint.
-When a Codespace is stopped and restarted, check that its run directory is
-still present before resuming. A rebuild or deletion may remove local state;
-preserve required receipts separately without putting secrets or large
-artifacts in Git. Cross-machine live-run migration is not implemented.
+Git transports committed project files, **not** an orchestrator checkpoint.
+For a live cross-machine run, use the private PostgreSQL shared-resume mode
+described in [the orchestration guide](orchestration.md#shared-notebook--codespace-resume).
+It transfers the same run ID, LangGraph checkpoints, audit evidence, and
+available Astra/Sol Codex rollouts through PostgreSQL, not the public Git
+repository. Each `resume --shared` materializes a new local cache outside the
+project tree. Stop the command on one machine before resuming on the other;
+the database lock rejects two simultaneous controllers. Git-pull the same
+project commit first, and arrange separate storage for any required large
+datasets or evidence. Credentials still remain host-local and must be set up
+independently in the Codespace.
 
 Repository code uses the launch `--project-root` and the specification's
 relative paths; no Windows `D:\\...` path is required by the runtime. Supply

@@ -289,11 +289,12 @@ The requested model names are listed in the
 
 ## Persistence, restart, and evidence
 
-Each run has one durable directory. `checkpoint.sqlite` is the LangGraph
-SQLite checkpointer, and the run ID is the stable LangGraph `thread_id`.
-Reopening the same run directory continues the same checkpoint, counters,
-recovery history, and role session policy. Real runs never use an in-memory
-checkpointer.
+In local mode, each run has one durable directory. `checkpoint.sqlite` is the
+LangGraph SQLite checkpointer, and the run ID is the stable LangGraph
+`thread_id`. Reopening the same run directory continues the same checkpoint,
+counters, recovery history, and role session policy. Shared mode mirrors
+consistent snapshots of this same checkpoint and its evidence to private
+PostgreSQL. Real runs never use an in-memory checkpointer.
 
 The run directory must be outside `project_root`. Sol receives a
 workspace-write sandbox rooted at the project, so placing controller evidence
@@ -347,6 +348,7 @@ The evidence layout is:
     <review-id>/
       packet.json
       packet-receipt.json
+      execution-packet-<hash>.json  # host-path view, only after a cross-host review handoff
       result.json
       receipt.json
   final-receipt.json            # terminal run
@@ -366,6 +368,117 @@ Schema-v1 manifests/checkpoints are intentionally not resumed by this
 schema-v2 runtime; the runtime fails closed on a version mismatch. Preserve a
 v1 directory as historical evidence and start a new v2 run. No in-place
 checkpoint migration is implied.
+
+## Shared notebook ↔ Codespace resume
+
+Install `.[shared]` on the notebook (Codespaces installs it automatically).
+Create a private PostgreSQL database reachable from both hosts, using a
+**direct, non-pooler** connection because an advisory lock is held for the
+duration of each command. Set `ASTRA_STATE_DATABASE_URL` in the notebook's
+ignored `.env` and as a GitHub Codespaces Secret; use `sslmode=require` (or
+certificate-verifying SSL). Never commit, print, or paste the URL, Codex
+credentials, or LangSmith key. Authenticate Codex separately on both hosts.
+The database contains prompts, model outputs, and audit evidence; keep it
+private and restrict access accordingly. Do not put secret values in role
+prompts or USER responses.
+For the selected Neon service, create the database in the
+[Neon Console](https://console.neon.tech/) and copy the **non-pooled** URL from
+Connection Details (the pooled hostname has a `-pooler` suffix). Do not enable
+a paid plan for this setup without separate approval.
+
+Start a **new** shared run on the notebook, with the cache outside Sol's
+project root:
+
+```powershell
+& .\.venv\Scripts\python.exe -m astra_orchestrator start `
+  --shared --spec examples\orchestration-spec.json `
+  --project-root . --run-dir ..\astra-runs\first-cache
+```
+
+Copy the printed `run_id` (not the checkpoint directory) into the next
+command. After the notebook command exits, commit/push the project files and
+pull them in Codespaces. Resume there using a **new, empty** cache path:
+
+```bash
+.venv/bin/python -m astra_orchestrator resume --shared \
+  --run-id RUN_ID --project-root "$PWD" \
+  --run-dir /tmp/astra-RUN_ID-codespace-1
+```
+
+After that command exits, push/pull project changes and resume on the notebook
+with another new cache path:
+
+```powershell
+& .\.venv\Scripts\python.exe -m astra_orchestrator resume `
+  --shared --run-id RUN_ID --project-root . `
+  --run-dir ..\astra-runs\return-cache
+```
+
+Add `--response '{"request_id":"...","status":"PROVIDED","response":"...","evidence_artifact_paths":[]}'`
+only for a pending USER interrupt, never with a secret value. `status --shared`
+accepts the same `--run-id`, `--project-root`, and new `--run-dir` without
+advancing the graph. Existing paused schema-v2 local runs can be copied once
+with `publish --run-dir OLD_RUN_DIR` on the original host; it refuses to
+overwrite a shared run. Keep the original local directory as backup.
+
+To verify the actual PostgreSQL handoff **without Codex/model calls or project
+experiments**, use the isolated synthetic probe after both hosts have the same
+committed code and database secret. Run `start` on the notebook, `continue`
+in Codespaces, and `finish` on the notebook, copying the printed `run_id`
+between commands. Each cache path must be new:
+
+```powershell
+& .\.venv\Scripts\python.exe -m astra_orchestrator.shared_probe start `
+  --run-dir ..\astra-runs\probe-one
+```
+
+```bash
+.venv/bin/python -m astra_orchestrator.shared_probe continue \
+  --run-id RUN_ID --run-dir /tmp/astra-probe-two
+```
+
+```powershell
+& .\.venv\Scripts\python.exe -m astra_orchestrator.shared_probe finish `
+  --run-id RUN_ID --run-dir ..\astra-runs\probe-three
+```
+
+The probe creates only a tiny synthetic fixture under the host's temporary
+directory, not under the repository. Its output includes the stable run ID,
+phase, status, checkpoint ID, call sequence, receipt count, and explicit zero
+model/experiment counts. A passing final phase has `COMPLETED` and six
+completed call receipts. It does not prove that a real Codex session can be
+resumed across operating systems; that separate behavior is attempted only
+when a real run's Astra/Sol rollout is available on both hosts.
+
+PostgreSQL stores the complete run directory, including checkpoint history,
+logs, decisions, review packets, and receipts. Before each role call the
+`RUNNING` marker is mirrored; after completion its validated receipt is
+mirrored before the graph checkpoint. A crash in an ambiguous external-call
+window fails closed instead of repeating Sol work. Each checkpoint and pending
+write is mirrored, and one database advisory lock prevents concurrent hosts
+from advancing the same run. Host-local project paths are rebased at execution
+time; an immutable review packet retains its original hash and a separately
+hashed host-view packet records path relocation. The project purpose, plan,
+criteria, stage, and run/thread ID do not change during handoff.
+
+If PostgreSQL fails after a role ran, **do not** resume from another host's
+older snapshot. Keep the local cache and run `repair-publish --run-dir
+LOCAL_CACHE` after connectivity returns. It uploads local crash-window
+evidence only when the remote snapshot still matches that cache's last
+successful publish; otherwise it refuses to overwrite work from another
+host. An ambiguous in-progress role call remains fail-closed.
+
+Only Astra and Sol Codex rollout files associated with this run are copied to
+the private database, not `auth.json`, API keys, or global Codex configuration.
+The destination restores those files and requires its own Codex login. If a
+required rollout is absent or conflicts with a divergent local file, resume
+stops rather than silently starting a new session; the same Codex session ID
+is attempted where the installed CLI supports it. Luna and Reviewer are
+always new ephemeral sessions and are never restored. External evidence or
+datasets outside the Git-synced project root are **not** transferred; make
+those accessible separately before resuming. A missing artifact must not be
+treated as a passed review. LangSmith Studio remains a topology-only preview;
+the shared CLI run uses the same graph and tracing policy as local mode.
 
 ## Pause and resume
 

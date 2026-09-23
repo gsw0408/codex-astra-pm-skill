@@ -26,7 +26,7 @@ class CodespacesConfigTests(unittest.TestCase):
 
         setup = (ROOT / ".devcontainer/post-create.sh").read_text(encoding="utf-8")
         self.assertIn("python3.11 -m venv .venv", setup)
-        self.assertIn("pip install -e '.[studio]'", setup)
+        self.assertIn("pip install -e '.[studio,shared]'", setup)
         self.assertIn("npm install -g @openai/codex@", setup)
         self.assertNotIn("codex login", setup)
         self.assertNotIn("LANGSMITH_API_KEY=", setup)

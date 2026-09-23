@@ -15,6 +15,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+shared = [
+  "psycopg[binary]>=3.2,<4",
+]
 studio = [
   "langgraph-cli[inmem]",
   "colorama; sys_platform == 'win32'",

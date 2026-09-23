@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any, Mapping, Sequence
@@ -24,6 +25,7 @@ from .audit import (
 from .codex_cli import FIXED_ROLE_SETTINGS, CodexCliBackend, validated_role_settings
 from .graph import OrchestrationRuntime, USAGE_LIMIT_STOP_CODE, initial_state
 from .schema import SCHEMA_VERSION, validate_project_spec, validate_user_response
+from .shared import SharedRunStore, SharedStateError
 
 
 def _read_object(path: Path) -> dict[str, Any]:
@@ -44,14 +46,17 @@ def _backend_config(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def _backend_from_manifest(manifest: Mapping[str, Any]) -> CodexCliBackend:
+def _backend_from_manifest(
+    manifest: Mapping[str, Any], *, project_root: Path | None = None,
+    codex_executable: str | None = None,
+) -> CodexCliBackend:
     config = manifest["backend"]
     if config.get("type") != "codex_cli":
         raise ValueError("this command can resume only a codex_cli run")
     role_settings = validated_role_settings(config.get("role_settings", {}))
     return CodexCliBackend(
-        manifest["project_root"],
-        codex_executable=config["codex_executable"],
+        project_root or manifest["project_root"],
+        codex_executable=codex_executable or config["codex_executable"],
         timeout_seconds=float(config["timeout_seconds"]),
         role_settings=role_settings,
     )
@@ -190,7 +195,55 @@ def _verify_run(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     return manifest, spec
 
 
+def _database_url() -> str:
+    url = os.environ.get("ASTRA_STATE_DATABASE_URL", "")
+    if not url:
+        raise SharedStateError("ASTRA_STATE_DATABASE_URL is required for shared runs")
+    return url
+
+
+def _shared_options(
+    args: argparse.Namespace, manifest: Mapping[str, Any], *, record_root: bool
+) -> Path:
+    if args.project_root is None:
+        raise ValueError("shared resume requires --project-root on this host")
+    root = args.project_root.resolve()
+    if not root.is_dir():
+        raise FileNotFoundError(f"project root is not a directory: {root}")
+    run_dir = args.run_dir.resolve()
+    if run_dir == root or run_dir.is_relative_to(root):
+        raise ValueError("--run-dir must be outside --project-root")
+    roots_path = run_dir / "host-roots.json"
+    roots = read_json(roots_path)["roots"] if roots_path.is_file() else [manifest["project_root"]]
+    if record_root and str(root) not in roots:
+        roots.append(str(root))
+        replace_json(roots_path, {"roots": roots})
+    return root
+
+
+def _load_shared(
+    args: argparse.Namespace, *, for_resume: bool
+) -> tuple[SharedRunStore, dict[str, Any], Path]:
+    if not args.run_id:
+        raise ValueError("shared resume requires --run-id")
+    run_dir = args.run_dir.resolve()
+    store = SharedRunStore(args.run_id, _database_url(), run_dir)
+    try:
+        store.fetch(restore_sessions=for_resume)
+        manifest, _ = _verify_run(run_dir)
+        if manifest["run_id"] != args.run_id:
+            raise SharedStateError("shared snapshot run ID does not match")
+        root = _shared_options(args, manifest, record_root=for_resume)
+        if for_resume:
+            store.save()
+        return store, manifest, root
+    except BaseException:
+        store.close()
+        raise
+
+
 def _start(args: argparse.Namespace) -> int:
+    shared_url = _database_url() if args.shared else None
     spec_source = args.spec.resolve()
     project_root = args.project_root.resolve()
     run_dir = args.run_dir.resolve()
@@ -216,6 +269,22 @@ def _start(args: argparse.Namespace) -> int:
         "checkpoint_path": "checkpoint.sqlite",
         "backend": _backend_config(args),
     }
+    if args.shared:
+        with SharedRunStore(run_id, shared_url, run_dir) as store:
+            if store.exists():
+                raise SharedStateError("shared run ID already exists")
+            audit = AuditLog.create(run_dir, manifest)
+            write_json_exclusive(audit.run_dir / "spec.json", spec)
+            write_json_exclusive(audit.run_dir / "host-roots.json", {"roots": [str(project_root)]})
+            store.save()
+            backend = _backend_from_manifest(manifest)
+            with OrchestrationRuntime(audit.run_dir, backend, shared_store=store, project_root=project_root) as runtime:
+                runtime.invoke(initial_state(spec, run_id))
+                state = runtime.status()
+            _record_outcome(audit.run_dir, state)
+            store.save()
+        print(json.dumps(_public_state(state), ensure_ascii=False, indent=2))
+        return _workflow_exit_code(state)
     audit = AuditLog.create(run_dir, manifest)
     write_json_exclusive(audit.run_dir / "spec.json", spec)
     backend = _backend_from_manifest(manifest)
@@ -257,6 +326,22 @@ def _response_value(args: argparse.Namespace, state: Mapping[str, Any]) -> dict[
 
 
 def _resume(args: argparse.Namespace) -> int:
+    if args.shared:
+        store, manifest, root = _load_shared(args, for_resume=True)
+        with store:
+            backend = _backend_from_manifest(manifest, project_root=root, codex_executable=args.codex)
+            with OrchestrationRuntime(args.run_dir.resolve(), backend, shared_store=store, project_root=root) as runtime:
+                before = runtime.status()
+                response = _response_value(args, before)
+                if response is None:
+                    runtime.continue_after_restart()
+                else:
+                    runtime.resume(response)
+                state = runtime.status()
+            _record_outcome(args.run_dir.resolve(), state)
+            store.save()
+        print(json.dumps(_public_state(state), ensure_ascii=False, indent=2))
+        return _workflow_exit_code(state)
     run_dir = args.run_dir.resolve()
     manifest, _ = _verify_run(run_dir)
     backend = _backend_from_manifest(manifest)
@@ -274,12 +359,58 @@ def _resume(args: argparse.Namespace) -> int:
 
 
 def _status(args: argparse.Namespace) -> int:
+    if args.shared:
+        store, manifest, root = _load_shared(args, for_resume=False)
+        with store:
+            backend = _backend_from_manifest(manifest, project_root=root, codex_executable=args.codex)
+            with OrchestrationRuntime(args.run_dir.resolve(), backend, shared_store=store, project_root=root) as runtime:
+                state = runtime.status()
+        print(json.dumps(_public_state(state), ensure_ascii=False, indent=2))
+        return 0
     run_dir = args.run_dir.resolve()
     manifest, _ = _verify_run(run_dir)
     backend = _backend_from_manifest(manifest)
     with OrchestrationRuntime(run_dir, backend) as runtime:
         state = runtime.status()
     print(json.dumps(_public_state(state), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _publish(args: argparse.Namespace) -> int:
+    run_dir = args.run_dir.resolve()
+    manifest, _ = _verify_run(run_dir)
+    root = Path(manifest["project_root"]).resolve()
+    if not root.is_dir():
+        raise ValueError("publish must run on the original project host")
+    with SharedRunStore(manifest["run_id"], _database_url(), run_dir) as store:
+        if store.exists():
+            raise SharedStateError("shared run already exists; refusing to overwrite it")
+        roots_path = run_dir / "host-roots.json"
+        if not roots_path.exists():
+            write_json_exclusive(roots_path, {"roots": [str(root)]})
+        with OrchestrationRuntime(run_dir, _backend_from_manifest(manifest)) as runtime:
+            state = runtime.status()
+        for key in ("astra_session_id", "sol_session_id"):
+            session_id = state.get(key)
+            if isinstance(session_id, str) and session_id:
+                store.save_session(session_id)
+        store.save()
+    print(json.dumps({"run_id": manifest["run_id"], "status": state.get("status"), "shared": True}))
+    return 0
+
+
+def _repair_publish(args: argparse.Namespace) -> int:
+    run_dir = args.run_dir.resolve()
+    manifest, _ = _verify_run(run_dir)
+    with SharedRunStore(manifest["run_id"], _database_url(), run_dir) as store:
+        store.repair_from_local()
+        for receipt_path in (run_dir / "calls").glob("*/receipt.json"):
+            receipt = read_json(receipt_path)
+            if receipt.get("role") in {"astra", "sol"}:
+                session_id = receipt.get("session_id")
+                if isinstance(session_id, str) and session_id:
+                    store.save_session(session_id)
+    print(json.dumps({"run_id": manifest["run_id"], "repaired": True}))
     return 0
 
 
@@ -304,16 +435,33 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--project-root", type=Path, required=True)
     start.add_argument("--run-dir", type=Path, required=True)
     start.add_argument("--run-id")
+    start.add_argument("--shared", action="store_true", help="Mirror checkpoints and evidence to private PostgreSQL")
     _add_backend_options(start)
     start.set_defaults(handler=_start)
     resume = subparsers.add_parser("resume", help="Resume the existing checkpoint/thread")
     resume.add_argument("--run-dir", type=Path, required=True)
+    resume.add_argument("--shared", action="store_true")
+    resume.add_argument("--run-id")
+    resume.add_argument("--project-root", type=Path)
+    resume.add_argument("--codex", default="codex")
     resume.add_argument("--response")
     resume.add_argument("--response-file", type=Path)
     resume.set_defaults(handler=_resume)
     status = subparsers.add_parser("status", help="Inspect persisted state without advancing it")
     status.add_argument("--run-dir", type=Path, required=True)
+    status.add_argument("--shared", action="store_true")
+    status.add_argument("--run-id")
+    status.add_argument("--project-root", type=Path)
+    status.add_argument("--codex", default="codex")
     status.set_defaults(handler=_status)
+    publish = subparsers.add_parser("publish", help="Copy a paused local run to private shared storage")
+    publish.add_argument("--run-dir", type=Path, required=True)
+    publish.set_defaults(handler=_publish)
+    repair = subparsers.add_parser(
+        "repair-publish", help="Upload crash-window local evidence if its shared base is unchanged"
+    )
+    repair.add_argument("--run-dir", type=Path, required=True)
+    repair.set_defaults(handler=_repair_publish)
     dry = subparsers.add_parser("dry-run", help="Run the local scripted no-experiment proof")
     dry.add_argument("--output", type=Path, required=True)
     dry.set_defaults(handler=_dry_run)
