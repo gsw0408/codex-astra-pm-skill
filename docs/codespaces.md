@@ -6,6 +6,8 @@ on the Windows notebook and in a Codespace. The dev container uses Python
 3.11, Node.js 22, and the repository's `.[studio,shared]` dependency groups; its
 post-create step installs Codex CLI. No model, dataset, or experiment is run
 during setup.
+The devcontainer also installs the SSH server feature required by
+`gh codespace ssh`; this does not make the Codespace SSH port public.
 The pinned Codex CLI version is `0.156.1`, which includes the GPT-6 Sol/Luna
 model catalog according to the [Codex release notes](https://learn.chatgpt.com/docs/changelog).
 New orchestration runs request those models; actual account access still
@@ -46,6 +48,11 @@ git --version
 .venv/bin/langgraph --help
 codex login status
 ```
+
+For local CLI access, run `gh codespace ssh -c CODESPACE_NAME -- pwd` from the
+notebook after the Codespace is running. If the SSH feature was added to an
+existing Codespace, rebuild that Codespace once to apply the devcontainer
+change; stopping and starting alone does not install the feature.
 
 Codex login is a separate **human** action. Prefer ChatGPT account sign-in;
 in a headless Codespace use `codex login --device-auth` if your account or

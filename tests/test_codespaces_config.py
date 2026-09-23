@@ -20,6 +20,7 @@ class CodespacesConfigTests(unittest.TestCase):
             config["features"]["ghcr.io/devcontainers/features/node:2"]["version"],
             "22",
         )
+        self.assertIn("ghcr.io/devcontainers/features/sshd:1", config["features"])
         self.assertEqual(config["postCreateCommand"], "bash .devcontainer/post-create.sh")
         self.assertIn(2024, config["forwardPorts"])
         self.assertNotIn("portsVisibility", config)
