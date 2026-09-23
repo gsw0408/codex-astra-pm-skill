@@ -35,13 +35,15 @@ post-create step exited with code 0 and reported Python 3.11.16, Node
 | Codex login | `codex login status` reported `Not logged in` before user authentication. No real role/model call was made. |
 
 Still requiring a human-only ChatGPT sign-in in this Codespace, verification
-of actual GPT-6 Sol/Luna account access, and the Codespace commit/push followed
-by notebook pull. A missing `LANGSMITH_API_KEY` banner appeared in Studio; the
-graph preview works without it, but remote LangSmith trace uploads were not
-verified. Follow [the Codespaces guide](codespaces.md) for the safe handoff
-boundary. Stop the Codespace when not in use to conserve quota.
-
+of actual GPT-6 Sol/Luna account access. A missing `LANGSMITH_API_KEY` banner
+appeared in Studio; the graph preview works without it, but remote LangSmith
+trace uploads were not verified. Follow [the Codespaces guide](codespaces.md)
+for the safe handoff boundary. Stop the Codespace when not in use to conserve
+quota.
 
 ## Codespace-to-notebook handoff
 
-The Codespace fast-forwarded from `d05b239` to `6e52dc3` with `git pull --ff-only`. This section is the small Codespace-originated Git artifact for the return-path check; the notebook pull is verified separately after this commit is pushed.
+The Codespace fast-forwarded from `d05b239` to `6e52dc3` with
+`git pull --ff-only`. It committed and pushed this section as `4051ed6`.
+The notebook then fast-forwarded from `6e52dc3` to `4051ed6` with
+`git pull --ff-only origin main`; unrelated local changes remained untouched.
