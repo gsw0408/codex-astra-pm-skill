@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.astra-orchestrator/schemas/review_package.schema.json",
+  "title": "ReviewPackage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "review_id",
+    "stage_id",
+    "plan_revision_id",
+    "ultimate_purpose",
+    "project_root",
+    "project_context",
+    "milestone_goal",
+    "acceptance_criteria",
+    "sol_instructions",
+    "actual_results",
+    "evidence_artifact_paths",
+    "known_limitations",
+    "current_state",
+    "proposed_next_plan"
+  ],
+  "properties": {
+    "review_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "package_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "stage_id": {"type": "string", "minLength": 1},
+    "plan_revision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "ultimate_purpose": {"type": "string", "minLength": 1},
+    "project_root": {"type": "string", "minLength": 1},
+    "project_context": {"type": "string", "minLength": 1},
+    "milestone_goal": {"type": "string", "minLength": 1},
+    "acceptance_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "sol_instructions": {"$ref": "#/$defs/solTask"},
+    "actual_results": {
+      "allOf": [
+        {"$ref": "#/$defs/solResult"},
+        {"properties": {"status": {"const": "MILESTONE_COMPLETE"}}}
+      ]
+    },
+    "evidence_artifact_paths": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidenceArtifact"}
+    },
+    "known_limitations": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "current_state": {"$ref": "#/$defs/reviewState"},
+    "proposed_next_plan": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "evidenceArtifact": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "description": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "solTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "stage_id",
+        "plan_revision_id",
+        "objective",
+        "acceptance_criteria",
+        "constraints",
+        "targeted_checks",
+        "forbidden_areas"
+      ],
+      "properties": {
+        "task_id": {"type": "string", "minLength": 1},
+        "stage_id": {"type": "string", "minLength": 1},
+        "plan_revision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+        "objective": {"type": "string", "minLength": 1},
+        "acceptance_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "constraints": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "targeted_checks": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "forbidden_areas": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "recovery_strategy": {"$ref": "#/$defs/recoveryStrategy"}
+      }
+    },
+    "solResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "stage_id",
+        "plan_revision_id",
+        "status",
+        "summary",
+        "evidence",
+        "evidence_artifact_paths",
+        "known_limitations",
+        "blockers",
+        "user_actions_requested"
+      ],
+      "properties": {
+        "task_id": {"type": "string", "minLength": 1},
+        "stage_id": {"type": "string", "minLength": 1},
+        "plan_revision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+        "status": {
+          "enum": ["DONE", "BLOCKED", "NEEDS_USER", "MILESTONE_COMPLETE", "FAILED"]
+        },
+        "summary": {"type": "string", "minLength": 1},
+        "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "evidence_artifact_paths": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidenceArtifact"}
+        },
+        "known_limitations": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "blockers": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "user_actions_requested": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "error": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"enum": ["DONE", "MILESTONE_COMPLETE"]}}},
+          "then": {
+            "properties": {
+              "blockers": {"maxItems": 0},
+              "user_actions_requested": {"maxItems": 0}
+            },
+            "not": {"required": ["error"]}
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "MILESTONE_COMPLETE"}}},
+          "then": {"properties": {"evidence_artifact_paths": {"minItems": 1}}}
+        },
+        {
+          "if": {"properties": {"status": {"const": "BLOCKED"}}},
+          "then": {
+            "properties": {
+              "blockers": {"minItems": 1},
+              "user_actions_requested": {"maxItems": 0}
+            },
+            "not": {"required": ["error"]}
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "NEEDS_USER"}}},
+          "then": {
+            "properties": {"user_actions_requested": {"minItems": 1}},
+            "not": {"required": ["error"]}
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "FAILED"}}},
+          "then": {
+            "required": ["error"],
+            "properties": {"user_actions_requested": {"maxItems": 0}}
+          }
+        }
+      ]
+    },
+    "recoveryStrategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issue_id",
+        "strategy_id",
+        "attempt",
+        "approach",
+        "rationale",
+        "difference_from_prior"
+      ],
+      "properties": {
+        "issue_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+        "strategy_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+        "attempt": {"type": "integer", "minimum": 1, "maximum": 5},
+        "approach": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1},
+        "difference_from_prior": {"type": "string", "minLength": 1}
+      }
+    },
+    "executionLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_sol_attempts_per_stage",
+        "max_review_attempts_per_stage",
+        "max_transitions",
+        "max_model_errors"
+      ],
+      "properties": {
+        "max_sol_attempts_per_stage": {"type": "integer", "minimum": 1},
+        "max_review_attempts_per_stage": {"type": "integer", "minimum": 1},
+        "max_transitions": {"type": "integer", "minimum": 1},
+        "max_model_errors": {"type": "integer", "minimum": 1}
+      }
+    },
+    "retryCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sol_attempts_by_stage",
+        "sol_attempts_by_task",
+        "review_attempts_by_stage"
+      ],
+      "properties": {
+        "sol_attempts_by_stage": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "sol_attempts_by_task": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "review_attempts_by_stage": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "activePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_id",
+        "current_stage",
+        "project_context",
+        "target_stage",
+        "stages",
+        "experiment_plan",
+        "datasets",
+        "evaluation_criteria",
+        "approaches"
+      ],
+      "properties": {
+        "revision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+        "current_stage": {"type": "string", "minLength": 1},
+        "project_context": {"type": "string", "minLength": 1},
+        "target_stage": {"type": "string", "minLength": 1},
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "goal", "acceptance_criteria", "requires_review"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "goal": {"type": "string", "minLength": 1},
+              "acceptance_criteria": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+              "requires_review": {"type": "boolean"}
+            }
+          }
+        },
+        "experiment_plan": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "datasets": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "evaluation_criteria": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "approaches": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "reviewState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "active_plan",
+        "current_stage",
+        "completed_stages",
+        "target_stage",
+        "target_stage_completed",
+        "execution_limits",
+        "retry_counts",
+        "correction_required",
+        "correction_ready",
+        "last_sol_task_id",
+        "last_sol_status"
+      ],
+      "properties": {
+        "active_plan": {"$ref": "#/$defs/activePlan"},
+        "current_stage": {"type": "string", "minLength": 1},
+        "completed_stages": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "target_stage": {"type": "string", "minLength": 1},
+        "target_stage_completed": {"type": "boolean"},
+        "execution_limits": {"$ref": "#/$defs/executionLimits"},
+        "retry_counts": {"$ref": "#/$defs/retryCounts"},
+        "correction_required": {"type": "boolean"},
+        "correction_ready": {"type": "boolean"},
+        "last_sol_task_id": {"type": "string", "minLength": 1},
+        "last_sol_status": {"enum": ["DONE", "BLOCKED", "NEEDS_USER", "MILESTONE_COMPLETE", "FAILED"]}
+      }
+    }
+  }
+}

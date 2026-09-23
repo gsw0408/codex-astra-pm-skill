@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astra-langgraph-orchestrator"
+version = "0.1.0"
+description = "Restart-safe Astra, Sol, fresh Luna, and fresh Reviewer orchestration over Codex CLI sessions"
+requires-python = ">=3.10"
+dependencies = [
+  "langgraph>=1.2.12,<2",
+  "langgraph-checkpoint-sqlite>=3.1.1,<4",
+  "langsmith>=0.14,<1",
+  "python-dotenv>=1,<2",
+]
+
+[project.optional-dependencies]
+studio = [
+  "langgraph-cli[inmem]",
+  "colorama; sys_platform == 'win32'",
+]
+
+[project.scripts]
+astra-orchestrator = "astra_orchestrator.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["astra_orchestrator*"]
+
+[tool.setuptools.package-data]
+astra_orchestrator = ["schemas/*.json"]

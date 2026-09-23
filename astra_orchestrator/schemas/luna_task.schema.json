@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.astra-orchestrator/schemas/luna_task.schema.json",
+  "title": "LunaTask",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "research_id",
+    "stage_id",
+    "plan_revision_id",
+    "question",
+    "scope",
+    "sources_to_consult",
+    "deliverables",
+    "constraints"
+  ],
+  "properties": {
+    "research_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "stage_id": {"type": "string", "minLength": 1},
+    "plan_revision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "question": {"type": "string", "minLength": 1},
+    "scope": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "sources_to_consult": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "deliverables": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "constraints": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "recovery_strategy": {"$ref": "#/$defs/recoveryStrategy"}
+  },
+  "$defs": {
+    "recoveryStrategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issue_id",
+        "strategy_id",
+        "attempt",
+        "approach",
+        "rationale",
+        "difference_from_prior"
+      ],
+      "properties": {
+        "issue_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+        "strategy_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+        "attempt": {"type": "integer", "minimum": 1, "maximum": 5},
+        "approach": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1},
+        "difference_from_prior": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

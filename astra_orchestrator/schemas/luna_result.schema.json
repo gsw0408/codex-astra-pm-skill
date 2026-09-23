@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.astra-orchestrator/schemas/luna_result.schema.json",
+  "title": "LunaResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "research_id",
+    "stage_id",
+    "plan_revision_id",
+    "status",
+    "summary",
+    "findings",
+    "sources",
+    "evidence_artifact_paths",
+    "known_limitations",
+    "blockers"
+  ],
+  "properties": {
+    "research_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "stage_id": {"type": "string", "minLength": 1},
+    "plan_revision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "status": {"enum": ["DONE", "INSUFFICIENT_EVIDENCE", "BLOCKED", "FAILED"]},
+    "summary": {"type": "string", "minLength": 1},
+    "findings": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/evidenceArtifact"}},
+    "evidence_artifact_paths": {"type": "array", "items": {"$ref": "#/$defs/evidenceArtifact"}},
+    "known_limitations": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "blockers": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "error": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "DONE"}}},
+      "then": {
+        "properties": {
+          "findings": {"minItems": 1},
+          "sources": {"minItems": 1},
+          "blockers": {"maxItems": 0}
+        },
+        "not": {"required": ["error"]}
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "INSUFFICIENT_EVIDENCE"}}},
+      "then": {
+        "anyOf": [
+          {"properties": {"known_limitations": {"minItems": 1}}},
+          {"properties": {"blockers": {"minItems": 1}}}
+        ],
+        "not": {"required": ["error"]}
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "BLOCKED"}}},
+      "then": {
+        "properties": {"blockers": {"minItems": 1}},
+        "not": {"required": ["error"]}
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "FAILED"}}},
+      "then": {"required": ["error"]}
+    }
+  ],
+  "$defs": {
+    "evidenceArtifact": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "description": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    }
+  }
+}

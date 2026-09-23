@@ -1,2 +1,10 @@
 __pycache__/
 *.py[cod]
+.venv/
+.pytest_cache/
+.astra-orchestrator/
+.langgraph_api/
+.env
+*.egg-info/
+.codex/auth.json
+.codex/sessions/

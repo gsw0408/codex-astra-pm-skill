@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.astra-orchestrator/schemas/active_plan.schema.json",
+  "title": "ActivePlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "revision_id",
+    "current_stage",
+    "project_context",
+    "target_stage",
+    "stages",
+    "experiment_plan",
+    "datasets",
+    "evaluation_criteria",
+    "approaches"
+  ],
+  "properties": {
+    "revision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "current_stage": {"type": "string", "minLength": 1},
+    "project_context": {"type": "string", "minLength": 1},
+    "target_stage": {"type": "string", "minLength": 1},
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "goal", "acceptance_criteria", "requires_review"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "goal": {"type": "string", "minLength": 1},
+          "acceptance_criteria": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "requires_review": {"type": "boolean"}
+        }
+      }
+    },
+    "experiment_plan": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "datasets": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "evaluation_criteria": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "approaches": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

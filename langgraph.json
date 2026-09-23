@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "astra_orchestrator": "./astra_orchestrator/studio.py:graph"
+  },
+  "env": ".env"
+}

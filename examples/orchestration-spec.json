@@ -1,0 +1,50 @@
+{
+  "project_id": "orchestrator-control-plane-example",
+  "project_root": ".",
+  "project_context": "Synthetic schema-v2 control-plane example only. The mutable plan may be revised by Astra, but no real project experiment, external side effect, or approved evidence change is allowed.",
+  "ultimate_purpose": "Demonstrate and verify the orchestration control flow using only synthetic artifacts, without performing or changing real project work or evidence.",
+  "target_stage": "dry_run_verified",
+  "experiment_plan": [
+    "Use deterministic scripted role outputs only.",
+    "Exercise routing, recovery, review, persistence, and termination without live model or project execution."
+  ],
+  "datasets": [
+    "Synthetic in-memory and temporary-file fixtures only."
+  ],
+  "evaluation_criteria": [
+    "All required routes and authority boundaries are represented in durable evidence.",
+    "Fresh Reviewer and Luna session identities are unique and never resumed.",
+    "No real experiment, paid resource, or approved project evidence is touched."
+  ],
+  "approaches": [
+    "Run the deterministic ScriptedBackend dry-run scenarios.",
+    "Inspect checkpoints, transition logs, review packets, recovery records, and receipts."
+  ],
+  "stages": [
+    {
+      "id": "orchestration_ready",
+      "goal": "Validate the schema-v2 control-plane specification and prepare synthetic evidence only.",
+      "acceptance_criteria": [
+        "The orchestration specification validates with an immutable ultimate purpose and a versioned mutable plan.",
+        "Only a dedicated dry-run output directory is created."
+      ],
+      "requires_review": true
+    },
+    {
+      "id": "dry_run_verified",
+      "goal": "Verify the major orchestration routes using scripted role results.",
+      "acceptance_criteria": [
+        "The scripted dry run produces evidence for Sol, fresh Luna, fresh Reviewer, the three allowed USER policies, automatic recovery, resume, and END routes.",
+        "No Codex subprocess, training, evaluation, dataset processing, paid resource, upload, or external side effect is used.",
+        "Approved project evidence remains unchanged."
+      ],
+      "requires_review": true
+    }
+  ],
+  "limits": {
+    "max_sol_attempts_per_stage": 3,
+    "max_review_attempts_per_stage": 3,
+    "max_transitions": 50,
+    "max_model_errors": 3
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.astra-orchestrator/schemas/user_response.schema.json",
+  "title": "UserResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "status", "response", "evidence_artifact_paths"],
+  "properties": {
+    "request_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["PROVIDED", "DECLINED", "CANCELLED"]},
+    "response": {"type": "string"},
+    "evidence_artifact_paths": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/evidenceArtifact"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"enum": ["DECLINED", "CANCELLED"]}}},
+      "then": {
+        "properties": {"response": {"minLength": 1}}
+      }
+    }
+  ],
+  "$defs": {
+    "evidenceArtifact": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "description": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    }
+  }
+}

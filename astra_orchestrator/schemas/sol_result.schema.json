@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.astra-orchestrator/schemas/sol_result.schema.json",
+  "title": "SolResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "stage_id",
+    "plan_revision_id",
+    "status",
+    "summary",
+    "evidence",
+    "evidence_artifact_paths",
+    "known_limitations",
+    "blockers",
+    "user_actions_requested"
+  ],
+  "properties": {
+    "task_id": {"type": "string", "minLength": 1},
+    "stage_id": {"type": "string", "minLength": 1},
+    "plan_revision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"},
+    "status": {
+      "enum": ["DONE", "BLOCKED", "NEEDS_USER", "MILESTONE_COMPLETE", "FAILED"]
+    },
+    "summary": {"type": "string", "minLength": 1},
+    "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "evidence_artifact_paths": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/evidenceArtifact"}
+    },
+    "known_limitations": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "blockers": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "user_actions_requested": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "error": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"enum": ["DONE", "MILESTONE_COMPLETE"]}}},
+      "then": {
+        "properties": {
+          "blockers": {"maxItems": 0},
+          "user_actions_requested": {"maxItems": 0}
+        },
+        "not": {"required": ["error"]}
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "MILESTONE_COMPLETE"}}},
+      "then": {"properties": {"evidence_artifact_paths": {"minItems": 1}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "BLOCKED"}}},
+      "then": {
+        "properties": {
+          "blockers": {"minItems": 1},
+          "user_actions_requested": {"maxItems": 0}
+        },
+        "not": {"required": ["error"]}
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "NEEDS_USER"}}},
+      "then": {
+        "properties": {"user_actions_requested": {"minItems": 1}},
+        "not": {"required": ["error"]}
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "FAILED"}}},
+      "then": {
+        "required": ["error"],
+        "properties": {"user_actions_requested": {"maxItems": 0}}
+      }
+    }
+  ],
+  "$defs": {
+    "evidenceArtifact": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "description": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    }
+  }
+}

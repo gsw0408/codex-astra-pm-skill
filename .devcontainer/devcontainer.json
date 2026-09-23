@@ -1,0 +1,18 @@
+{
+  "name": "Astra orchestration",
+  "image": "mcr.microsoft.com/devcontainers/python:3-3.11-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "22"
+    }
+  },
+  "remoteUser": "vscode",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [2024],
+  "portsAttributes": {
+    "2024": {
+      "label": "LangGraph Studio preview",
+      "onAutoForward": "notify"
+    }
+  }
+}

@@ -8,6 +8,15 @@ Invoke it explicitly with `$astra-pm`. The included `AGENTS.md` is a
 project-policy example; adapt its project map, verified commands, and state
 paths before using this repository in another codebase.
 
+## LangGraph orchestration
+
+The separate `astra_orchestrator` package runs a restart-safe Astra/Sol/Luna/
+Reviewer control plane through Codex CLI sessions. New runs use GPT-6 Astra
+High, GPT-6 Sol High for implementation and independent review, and GPT-6
+Luna Extra High for research. Older schema-v2 runs retain their recorded
+model settings on resume. See [the operations guide](docs/orchestration.md)
+and [Codespaces setup](docs/codespaces.md) for safe local and Linux use.
+
 ## Included configuration
 
 ```text
