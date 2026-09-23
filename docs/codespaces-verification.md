@@ -97,20 +97,32 @@ the shared-resume test; that shared-resume test passed when rerun in the
 targeted suite. These broader errors are not claimed as fixed by the SSH
 change.
 
-The real PostgreSQL handoff probe started locally under run ID
-`d376e8f4-9322-4a58-927c-bd6a6a0f732d` and reached `PAUSED_USER` with one
-completed synthetic receipt and zero model calls. The Codespace continuation
-has **not** run: after a rebuild and a subsequent complete stop/start, a
-boolean-only Codespace terminal check still reported `secret_present=True`,
-`ssl_required=True`, `direct_endpoint=False` for
-`ASTRA_STATE_DATABASE_URL`. A later structural check found
-`assignment_prefix=True`, `host_present=False`, and `pooled_endpoint=False`:
-the GitHub Secret Value included the redundant `ASTRA_STATE_DATABASE_URL=`
-prefix rather than containing only the URL. The local ignored `.env` reported
-a direct SSL endpoint. No connection string or credential was printed. A
-noninteractive `gh codespace ssh -- COMMAND` shell did not inherit the
-Codespaces Secret, although the VS Code terminal did. The probe must use the
-Codespace terminal after its Secret Value is corrected to a direct URL.
+The real PostgreSQL handoff probe used one run ID,
+`d376e8f4-9322-4a58-927c-bd6a6a0f732d`, across both hosts:
+
+| Host and phase | Observed checkpoint and state | Calls |
+| --- | --- | --- |
+| Notebook `start` | `1f1b7279-233f-6c55-8001-02c7d3eb9195`, `PAUSED_USER`/`USER` | sequence 1, one completed receipt |
+| Codespace `continue` | `1f1b72fa-65b6-6819-8005-31ab30a72700`, `RUNNING`/`REVIEW` | sequence 4, four completed receipts |
+| Notebook `finish` | `1f1b72fd-2d8f-69ed-8007-1ff477d2357a`, `COMPLETED`/`END` | sequence 6, six completed receipts |
+
+Each phase used a fresh host-local run directory and restored the saved
+LangGraph checkpoint and audit evidence from the private Neon PostgreSQL
+store. The sequence and receipt counts show that completed role calls were
+not repeated. All three phases used scripted results: zero model calls and
+no real project experiments.
+
+An earlier Secret Value contained a redundant `ASTRA_STATE_DATABASE_URL=`
+prefix. After that was corrected, a still-running Codespace terminal retained
+an older connection value and failed PostgreSQL authentication. The user
+updated the Secret again; its GitHub update time preceded a complete
+Codespace stop/start. In a fresh VS Code terminal, the URL fingerprint
+matched the notebook, the direct SSL connection succeeded, and the handoff
+probe completed. The earlier diagnosis that the newly entered Secret was
+wrong was incorrect: the active terminal had not received it yet. No
+connection string or credential was printed or committed. A noninteractive
+`gh codespace ssh -- COMMAND` shell did not inherit the Codespaces Secret,
+so the Codespace phase ran in the VS Code terminal.
 
 `codex login status` reported `Not logged in` in both SSH and the VS Code
 terminal after the rebuild. ChatGPT device authentication must be completed
