@@ -40,3 +40,8 @@ by notebook pull. A missing `LANGSMITH_API_KEY` banner appeared in Studio; the
 graph preview works without it, but remote LangSmith trace uploads were not
 verified. Follow [the Codespaces guide](codespaces.md) for the safe handoff
 boundary. Stop the Codespace when not in use to conserve quota.
+
+
+## Codespace-to-notebook handoff
+
+The Codespace fast-forwarded from `d05b239` to `6e52dc3` with `git pull --ff-only`. This section is the small Codespace-originated Git artifact for the return-path check; the notebook pull is verified separately after this commit is pushed.
