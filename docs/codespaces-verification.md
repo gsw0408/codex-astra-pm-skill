@@ -19,12 +19,24 @@ The first isolated local devcontainer launch could not read its root-owned
 After giving `vscode` access, the exact post-create script ran successfully.
 This local check does not prove GitHub's automatic post-create lifecycle.
 
-Still requiring a newly created, authenticated GitHub Codespace:
+## GitHub Codespace check
 
-- automatic post-create execution from the pushed branch;
-- ChatGPT account device/browser sign-in and account access to GPT-6 Sol/Luna;
-- private port-2024 forwarding and Studio access from the notebook browser;
-- the real Codespace commit/push followed by notebook pull.
+A new 2-core Codespace was created from `main` at commit
+`d05b239c4abbe8df1c657d0040b47f844afbe1e9`. GitHub's automatic
+post-create step exited with code 0 and reported Python 3.11.16, Node
+22.23.2, and Codex CLI 0.156.1. Its checkout remained clean after the checks.
 
-Those steps are not marked PASS by the local container check. Follow
-[the Codespaces guide](codespaces.md) for setup and the safe handoff boundary.
+| Check | Observed result |
+| --- | --- |
+| Remote regression | The 79 tests committed to this repository ran OK in the Codespace. The larger 145-test local run also includes uncommitted project-specific tests that were intentionally not published. |
+| Remote scripted dry-run | `PASS`, `codex_or_model_calls=0`, `real_training_or_experiments_run=false`; output stayed in the ignored `.astra-orchestrator/` directory. |
+| Remote Agent Server | `langgraph dev --host 0.0.0.0 --port 2024 --no-browser` returned `{"ok":true}` at `/ok`; `/assistants/search` listed `astra_orchestrator`. |
+| Port and Studio | GitHub CLI reported port 2024 forwarded with `private` visibility. An authenticated local tunnel from remote 2024 to notebook `127.0.0.1:2025` served `/ok`, and LangSmith Studio showed the connected Astra/Sol/Luna/Reviewer graph. Chrome blocked the direct `app.github.dev` URL on this notebook, so direct-URL browser access was not validated. |
+| Codex login | `codex login status` reported `Not logged in` before user authentication. No real role/model call was made. |
+
+Still requiring a human-only ChatGPT sign-in in this Codespace, verification
+of actual GPT-6 Sol/Luna account access, and the Codespace commit/push followed
+by notebook pull. A missing `LANGSMITH_API_KEY` banner appeared in Studio; the
+graph preview works without it, but remote LangSmith trace uploads were not
+verified. Follow [the Codespaces guide](codespaces.md) for the safe handoff
+boundary. Stop the Codespace when not in use to conserve quota.
