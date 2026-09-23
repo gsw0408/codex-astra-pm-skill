@@ -52,6 +52,16 @@ class OrchestrationPromptTests(unittest.TestCase):
         self.assertIn("purchasing credits", prompt)
         self.assertIn("scheduling an\nautomatic continuation", prompt)
 
+    def test_astra_prompt_preserves_temporary_drive_handoff_policy(self):
+        prompt = build_astra_prompt({"current_stage": "stage-1"})
+
+        self.assertIn("Google Drive only for data or artifacts currently", prompt)
+        self.assertIn("active review/resume evidence nor the sole copy", prompt)
+        self.assertIn("filename, byte count, and SHA-256", prompt)
+        self.assertIn("split the file into verified parts", prompt)
+        self.assertIn("If space still cannot be made safely", prompt)
+        self.assertIn("do not require separate\nUSER approval", prompt)
+
     def test_luna_prompt_is_fresh_research_only_and_returns_to_astra(self):
         task = {
             "research_id": "research-1",

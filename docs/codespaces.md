@@ -115,9 +115,21 @@ available Astra/Sol Codex rollouts through PostgreSQL, not the public Git
 repository. Each `resume --shared` materializes a new local cache outside the
 project tree. Stop the command on one machine before resuming on the other;
 the database lock rejects two simultaneous controllers. Git-pull the same
-project commit first, and arrange separate storage for any required large
-datasets or evidence. Credentials still remain host-local and must be set up
-independently in the Codespace.
+project commit first. Use Google Drive only for the data and evidence needed
+by the next host; do not store credentials there. Credentials remain host-local
+and must be set up independently in the Codespace.
+
+Before each notebook/Codespace switch, identify the next task's exact files,
+verify that needed files arrived intact, and remove obsolete temporary copies
+from the departing host. Archive a Drive file locally and compare its name,
+byte count, and SHA-256 with the Drive copy or an execution receipt before
+deleting it. Never delete the only copy or evidence required by a pending
+review or resume. If Drive is too full for a required transfer, use verified
+parts and check the reassembled file's whole-file hash. If safe cleanup and
+chunking still cannot provide enough space, stop and ask the user; do not
+silently buy storage or alter project evidence.
+Project-scoped Drive transfers and verified cleanup do not need separate user
+permission; unrelated personal files remain outside this handoff policy.
 
 In the verified Codespace, GitHub Codespaces Secrets were present in the VS
 Code terminal but not in a noninteractive `gh codespace ssh -- COMMAND` shell.

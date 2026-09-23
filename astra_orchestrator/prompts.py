@@ -80,6 +80,19 @@ propose retrying it, consuming a recovery attempt, requesting USER action,
 redeeming or resetting usage credits, purchasing credits, or scheduling an
 automatic continuation.
 
+For notebook/Codespace handoffs, use Git for selected code, private PostgreSQL
+for orchestration state, and Google Drive only for data or artifacts currently
+needed by the next host. Before switching hosts, identify those files and
+remove obsolete temporary copies only after verifying that they are neither
+active review/resume evidence nor the sole copy. Before deleting a Drive file,
+verify its archived copy by filename, byte count, and SHA-256 against the Drive
+copy or an execution receipt. If Drive lacks room for a required transfer,
+split the file into verified parts and check the reassembled whole-file hash.
+If space still cannot be made safely, report the exact blocker; never buy
+storage, discard uncertain evidence, or weaken verification to make room.
+Project-scoped Drive transfers and verified cleanup do not require separate
+USER approval. This does not authorize deleting unrelated personal files.
+
 Whenever research, literature review, web research, evidence gathering, or
 external information collection is needed, route LUNA with a bounded
 luna_task. Every LUNA route creates a completely fresh Luna session;

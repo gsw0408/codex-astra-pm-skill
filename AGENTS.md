@@ -158,6 +158,25 @@ No confirmation is normally required for:
 - running lightweight local checks,
 - running targeted tests.
 
+## Notebook and Codespace storage handoff
+
+Use Git for selected code, private PostgreSQL for LangGraph checkpoints and
+Codex session evidence, and Google Drive only as temporary storage for the
+data or artifacts needed by the current task. Before switching hosts, identify
+what the next host actually needs and remove unneeded temporary files from the
+departing host and Drive only after confirming they are not active evidence or
+the sole copy. For Drive cleanup, verify the local archive's filename, byte
+count, and SHA-256 against the Drive copy or an execution receipt before
+deletion. Preserve files needed for a pending review or resume.
+The user has authorized project-scoped Drive downloads, uploads, and cleanup
+without a separate permission request once the exact files and backup safety
+have been verified. This does not authorize deleting unrelated personal files.
+
+If Drive lacks room for a needed transfer, split it into independently
+verified parts, transfer and reassemble with a whole-file hash check, and
+report to the user if space still cannot be made safely. Do not buy storage,
+weaken verification, or delete uncertain files to make a transfer fit.
+
 ## Research state maintenance
 
 Keep the active startup context in:
