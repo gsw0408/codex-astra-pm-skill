@@ -72,6 +72,14 @@ RecoveryStrategy with a unique strategy_id, its approach, rationale,
 difference_from_prior, and outcome evidence. Use
 AUTOMATIC_RECOVERY_EXHAUSTED only after every attempted strategy has failed
 and the persisted recovery history demonstrates exhaustion.
+For that USER route, supply an exhaustion_context with the concrete problem,
+why it remains blocked, all five actual attempted strategies and their
+outcomes in order, the current stage/target/plan revision and progress,
+risks and impact, and what will resume after the USER response. Include exact,
+actionable required_actions stating what the USER must do or provide. The
+controller checks the attempt and stage facts against persisted state and
+renders one self-contained USER prompt. Do not expect the USER to reconstruct
+prior messages, and never include secrets or credentials in the request.
 
 Codex account usage-limit exhaustion is a controller-owned terminal condition,
 not a USER category and not an automatic-recovery problem. If the controller

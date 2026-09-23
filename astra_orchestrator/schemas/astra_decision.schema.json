@@ -400,6 +400,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["request_id", "category", "prompt", "required_actions"],
+      "if": {
+        "properties": {"category": {"const": "AUTOMATIC_RECOVERY_EXHAUSTED"}},
+        "required": ["category"]
+      },
+      "then": {"required": ["exhaustion_context"]},
+      "else": {"not": {"required": ["exhaustion_context"]}},
       "properties": {
         "request_id": {"type": "string", "minLength": 1},
         "category": {
@@ -410,7 +416,42 @@
           ]
         },
         "prompt": {"type": "string", "minLength": 1},
-        "required_actions": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+        "required_actions": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "exhaustion_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["problem", "why_blocked", "attempts", "current_state", "risks_and_impact", "resume_after_user"],
+          "properties": {
+            "problem": {"type": "string", "minLength": 1},
+            "why_blocked": {"type": "string", "minLength": 1},
+            "attempts": {
+              "type": "array", "minItems": 5, "maxItems": 5,
+              "items": {
+                "type": "object", "additionalProperties": false,
+                "required": ["attempt", "strategy_id", "route", "approach", "outcome"],
+                "properties": {
+                  "attempt": {"type": "integer", "minimum": 1, "maximum": 5},
+                  "strategy_id": {"type": "string", "minLength": 1},
+                  "route": {"enum": ["SOL", "LUNA"]},
+                  "approach": {"type": "string", "minLength": 1},
+                  "outcome": {"type": "string", "minLength": 1}
+                }
+              }
+            },
+            "current_state": {
+              "type": "object", "additionalProperties": false,
+              "required": ["stage_id", "target_stage", "plan_revision_id", "summary"],
+              "properties": {
+                "stage_id": {"type": "string", "minLength": 1},
+                "target_stage": {"type": "string", "minLength": 1},
+                "plan_revision_id": {"type": "string", "minLength": 1},
+                "summary": {"type": "string", "minLength": 1}
+              }
+            },
+            "risks_and_impact": {"type": "string", "minLength": 1},
+            "resume_after_user": {"type": "string", "minLength": 1}
+          }
+        }
       }
     },
     "planRevision": {

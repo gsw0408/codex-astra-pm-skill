@@ -863,6 +863,20 @@ class OrchestrationRuntime:
             raise ValidationError(
                 "AUTOMATIC_RECOVERY_EXHAUSTED requires five failed recovery attempts"
             )
+        context = request["exhaustion_context"]
+        expected_attempts = [
+            {key: attempt[key] for key in ("attempt", "strategy_id", "route", "approach", "outcome")}
+            for attempt in attempts
+        ]
+        if context["attempts"] != expected_attempts:
+            raise ValidationError("USER exhaustion summary must match the five persisted attempts")
+        current = context["current_state"]
+        if (
+            current["stage_id"] != state["current_stage"]
+            or current["target_stage"] != state["active_plan"]["target_stage"]
+            or current["plan_revision_id"] != state["active_plan"]["revision_id"]
+        ):
+            raise ValidationError("USER exhaustion summary must match the current stage and plan")
 
     def _validate_astra_business_rules(
         self, state: Mapping[str, Any], decision: Mapping[str, Any]

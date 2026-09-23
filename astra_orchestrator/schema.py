@@ -285,7 +285,31 @@ class StageTransition(TypedDict):
     approved: Literal[True]
 
 
-class UserRequest(TypedDict):
+class ExhaustionAttempt(TypedDict):
+    attempt: int
+    strategy_id: str
+    route: Literal["SOL", "LUNA"]
+    approach: str
+    outcome: str
+
+
+class ExhaustionState(TypedDict):
+    stage_id: str
+    target_stage: str
+    plan_revision_id: str
+    summary: str
+
+
+class ExhaustionContext(TypedDict):
+    problem: str
+    why_blocked: str
+    attempts: list[ExhaustionAttempt]
+    current_state: ExhaustionState
+    risks_and_impact: str
+    resume_after_user: str
+
+
+class _UserRequestRequired(TypedDict):
     request_id: str
     category: Literal[
         "AUTH_OR_HUMAN_ACTION_REQUIRED",
@@ -294,6 +318,10 @@ class UserRequest(TypedDict):
     ]
     prompt: str
     required_actions: list[str]
+
+
+class UserRequest(_UserRequestRequired, total=False):
+    exhaustion_context: ExhaustionContext
 
 
 class AstraDecision(TypedDict, total=False):
@@ -1237,23 +1265,96 @@ def _validate_user_request(value: object) -> UserRequest:
         value,
         label="UserRequest",
         required={"request_id", "category", "prompt", "required_actions"},
+        optional={"exhaustion_context"},
     )
     category = _text(data["category"], "UserRequest.category")
     if category not in _USER_REQUEST_CATEGORIES:
         raise ValidationError(
             "UserRequest.category must identify a supported human-intervention reason"
         )
-    return cast(
-        UserRequest,
-        {
-            "request_id": _text(data["request_id"], "UserRequest.request_id"),
-            "category": category,
-            "prompt": _text(data["prompt"], "UserRequest.prompt"),
-            "required_actions": _strings(
-                data["required_actions"], "UserRequest.required_actions", non_empty=True
-            ),
+    prompt = _text(data["prompt"], "UserRequest.prompt")
+    actions = _strings(data["required_actions"], "UserRequest.required_actions", non_empty=True)
+    normalized: UserRequest = {
+        "request_id": _text(data["request_id"], "UserRequest.request_id"),
+        "category": cast(Any, category),
+        "prompt": prompt,
+        "required_actions": actions,
+    }
+    if category != "AUTOMATIC_RECOVERY_EXHAUSTED":
+        if "exhaustion_context" in data:
+            raise ValidationError("exhaustion_context is only valid for automatic recovery exhaustion")
+        return normalized
+    if "exhaustion_context" not in data:
+        raise ValidationError("AUTOMATIC_RECOVERY_EXHAUSTED requires exhaustion_context")
+    context_data = _shape(
+        data["exhaustion_context"],
+        label="UserRequest.exhaustion_context",
+        required={
+            "problem", "why_blocked", "attempts", "current_state",
+            "risks_and_impact", "resume_after_user",
         },
     )
+    attempts_value = context_data["attempts"]
+    if not isinstance(attempts_value, list) or len(attempts_value) != 5:
+        raise ValidationError("exhaustion_context.attempts must contain exactly five attempts")
+    attempts: list[ExhaustionAttempt] = []
+    for index, value in enumerate(attempts_value, 1):
+        item = _shape(
+            value,
+            label=f"exhaustion_context.attempts[{index - 1}]",
+            required={"attempt", "strategy_id", "route", "approach", "outcome"},
+        )
+        if type(item["attempt"]) is not int or item["attempt"] != index:
+            raise ValidationError("exhaustion_context.attempts must be numbered 1 through 5")
+        route = _text(item["route"], f"exhaustion_context.attempts[{index - 1}].route")
+        if route not in {"SOL", "LUNA"}:
+            raise ValidationError("exhaustion_context attempt route must be SOL or LUNA")
+        attempts.append({
+            "attempt": index,
+            "strategy_id": _identifier(item["strategy_id"], "exhaustion_context.strategy_id"),
+            "route": cast(Any, route),
+            "approach": _text(item["approach"], "exhaustion_context.approach"),
+            "outcome": _text(item["outcome"], "exhaustion_context.outcome"),
+        })
+    state_data = _shape(
+        context_data["current_state"],
+        label="exhaustion_context.current_state",
+        required={"stage_id", "target_stage", "plan_revision_id", "summary"},
+    )
+    current_state: ExhaustionState = {
+        "stage_id": _text(state_data["stage_id"], "exhaustion_context.current_state.stage_id"),
+        "target_stage": _text(state_data["target_stage"], "exhaustion_context.current_state.target_stage"),
+        "plan_revision_id": _text(state_data["plan_revision_id"], "exhaustion_context.current_state.plan_revision_id"),
+        "summary": _text(state_data["summary"], "exhaustion_context.current_state.summary"),
+    }
+    context: ExhaustionContext = {
+        "problem": _text(context_data["problem"], "exhaustion_context.problem"),
+        "why_blocked": _text(context_data["why_blocked"], "exhaustion_context.why_blocked"),
+        "attempts": attempts,
+        "current_state": current_state,
+        "risks_and_impact": _text(context_data["risks_and_impact"], "exhaustion_context.risks_and_impact"),
+        "resume_after_user": _text(context_data["resume_after_user"], "exhaustion_context.resume_after_user"),
+    }
+    attempt_lines = [
+        f"{item['attempt']}. {item['route']} — {item['approach']}: {item['outcome']}"
+        for item in attempts
+    ]
+    normalized["exhaustion_context"] = context
+    normalized["prompt"] = "\n".join([
+        "Automatic recovery is exhausted; user action is required.",
+        "", "Problem: " + context["problem"],
+        "Why blocked: " + context["why_blocked"],
+        "What Astra tried (all failed):", *attempt_lines,
+        "Current state: stage " + current_state["stage_id"]
+        + ", target " + current_state["target_stage"]
+        + ", plan " + current_state["plan_revision_id"]
+        + ". " + current_state["summary"],
+        "USER must do or provide:", *["- " + action for action in actions],
+        "Risks/impact: " + context["risks_and_impact"],
+        "After your response: the same checkpoint resumes at Astra. "
+        + context["resume_after_user"],
+    ])
+    return normalized
 
 
 def _validate_stage_transition(value: object) -> StageTransition:

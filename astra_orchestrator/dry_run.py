@@ -687,8 +687,36 @@ def _automatic_recovery_exhaustion(
     request = {
         "request_id": "automatic-recovery-exhausted",
         "category": "AUTOMATIC_RECOVERY_EXHAUSTED",
-        "prompt": "Five distinct automatic recovery strategies failed; user direction is required.",
-        "required_actions": ["Choose whether to stop or supply genuinely new information."],
+        "prompt": "The synthetic recovery issue now needs a user decision.",
+        "required_actions": [
+            "Provide a new local evidence path not already inspected, or reply STOP to end this synthetic run."
+        ],
+        "exhaustion_context": {
+            "problem": "The synthetic operation cannot be completed from the supplied evidence.",
+            "why_blocked": "All five permitted automatic recovery strategies failed without resolving the evidence gap.",
+            "attempts": [
+                {
+                    "attempt": index,
+                    "strategy_id": strategy["strategy_id"],
+                    "route": "LUNA" if index in {1, 3, 5} else "SOL",
+                    "approach": strategy["approach"],
+                    "outcome": outcome,
+                }
+                for index, (strategy, outcome) in enumerate(zip(strategies, [
+                    luna_results[0]["summary"], sol_results[0]["summary"],
+                    luna_results[1]["summary"], sol_results[1]["summary"],
+                    luna_results[2]["summary"],
+                ]), 1)
+            ],
+            "current_state": {
+                "stage_id": "verified",
+                "target_stage": "verified",
+                "plan_revision_id": "initial",
+                "summary": "The dry run is paused before the target-stage gate; no real work was performed.",
+            },
+            "risks_and_impact": "The run cannot advance without new evidence; unverified input would undermine the gate.",
+            "resume_after_user": "Astra will evaluate the supplied evidence or stop instruction before assigning any further bounded work.",
+        },
     }
     backend = ScriptedBackend({
         "astra": _scripts(scenario, "astra", [
@@ -713,6 +741,7 @@ def _automatic_recovery_exhaustion(
         "scenario": "non-human NEEDS_USER receives five distinct recoveries before USER",
         "status": state["status"],
         "user_category": state["pending_user_request"]["category"],
+        "user_request": state["pending_user_request"],
         "recovery_issue_id": state["recovery_issue_id"],
         "recovery_attempt_count": len(attempts),
         "recovery_attempts": attempts,
@@ -896,6 +925,23 @@ def run_dry_run(output: Path) -> dict[str, Any]:
             and exhaustion["strategy_ids_unique"] and exhaustion["approaches_unique"]
             and exhaustion["all_recoveries_failed"]
             and exhaustion["ordinary_sol_retry_counts"]["sol_attempts_by_stage"] == {"verified": 1}
+        ),
+        "exhaustion_user_request_is_self_contained": (
+            all(
+                section in exhaustion["user_request"]["prompt"]
+                for section in (
+                    "Problem:", "Why blocked:", "What Astra tried (all failed):",
+                    "Current state:", "USER must do or provide:",
+                    "Risks/impact:", "After your response:",
+                )
+            )
+            and exhaustion["user_request"]["exhaustion_context"]["attempts"] == [
+                {key: attempt[key] for key in (
+                    "attempt", "strategy_id", "route", "approach", "outcome"
+                )}
+                for attempt in exhaustion["recovery_attempts"]
+            ]
+            and bool(exhaustion["user_request"]["required_actions"])
         ),
         "fixed_role_settings": FIXED_ROLE_SETTINGS == {
             "astra": {"title": "Project Manager", "model": "gpt-6-astra", "reasoning_effort": "high"},

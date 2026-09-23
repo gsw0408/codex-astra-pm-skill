@@ -190,6 +190,17 @@ an exhaustion interrupt before five failures, or a non-USER route after the
 fifth failure is rejected. Attempts are checkpointed and appended to
 `recovery-attempts.jsonl`, so restarting cannot reset the count.
 
+At this five-failure escalation, Astra's `user_request` must be self-contained.
+Its required `exhaustion_context` states the concrete problem, why automatic
+work is blocked, all five strategies and their actual outcomes, the current
+stage/target/plan revision and progress, risks or impact, and what resumes
+after the user responds. `required_actions` says exactly what the user must
+do or provide. The controller checks the attempts and stage identifiers
+against persisted state and renders these fields into the displayed prompt;
+the user need not reconstruct prior conversation. Do not include secrets or
+credentials in the request. Other USER categories retain their existing
+request shape.
+
 ## Codex usage-quota hard stop
 
 Codex usage quota exhaustion is a terminal controller condition, not a USER

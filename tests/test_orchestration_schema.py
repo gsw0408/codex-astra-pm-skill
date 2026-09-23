@@ -37,6 +37,31 @@ def sol_task():
     }
 
 
+def exhaustion_context():
+    return {
+        "problem": "The synthetic evidence is missing.",
+        "why_blocked": "Five safe automatic strategies failed.",
+        "attempts": [
+            {
+                "attempt": number,
+                "strategy_id": f"strategy-{number}",
+                "route": "LUNA" if number % 2 else "SOL",
+                "approach": f"Distinct approach {number}.",
+                "outcome": f"Approach {number} did not resolve the issue.",
+            }
+            for number in range(1, 6)
+        ],
+        "current_state": {
+            "stage_id": "stage-1",
+            "target_stage": "stage-1",
+            "plan_revision_id": "plan-1",
+            "summary": "The workflow is paused before stage acceptance.",
+        },
+        "risks_and_impact": "The stage cannot advance until the evidence gap is resolved.",
+        "resume_after_user": "Astra will evaluate the response and choose the next bounded task.",
+    }
+
+
 def sol_result(status="MILESTONE_COMPLETE"):
     result = {
         "task_id": "task-1",
@@ -477,6 +502,8 @@ class AstraAndUserValidationTests(unittest.TestCase):
                     "category": category,
                     "prompt": "Perform the permitted user action.",
                     "required_actions": ["Complete the recorded action."],
+                    **({"exhaustion_context": exhaustion_context()}
+                       if category == "AUTOMATIC_RECOVERY_EXHAUSTED" else {}),
                 },
             }
             self.assertEqual(
@@ -518,6 +545,64 @@ class AstraAndUserValidationTests(unittest.TestCase):
         invalid_limit = dict(response, limit_overrides={"max_transitions": 50})
         with self.assertRaisesRegex(ValidationError, "unknown field"):
             validate_user_response(invalid_limit)
+
+    def test_exhaustion_user_request_is_complete_and_rendered_for_the_user(self):
+        request = {
+            "request_id": "request-exhausted",
+            "category": "AUTOMATIC_RECOVERY_EXHAUSTED",
+            "prompt": "Automatic recovery is exhausted.",
+            "required_actions": ["Provide the missing evidence path or reply STOP."],
+            "exhaustion_context": exhaustion_context(),
+        }
+        decision = validate_astra_decision({
+            "decision_id": "decision-exhausted",
+            "route": "USER",
+            "reason": "Five attempts failed.",
+            "user_request": request,
+        })
+        self.assertEqual(validate_astra_decision(decision), decision)
+        rendered = decision["user_request"]["prompt"]
+        for detail in (
+            "Problem:", "Why blocked:", "What Astra tried (all failed):",
+            "Current state:", "USER must do or provide:", "Risks/impact:",
+            "After your response:", "Distinct approach 5.", "reply STOP",
+            "same checkpoint resumes at Astra",
+        ):
+            self.assertIn(detail, rendered)
+        for field in exhaustion_context():
+            invalid = dict(request, exhaustion_context={
+                key: value for key, value in exhaustion_context().items() if key != field
+            })
+            with self.subTest(missing=field), self.assertRaisesRegex(ValidationError, field):
+                validate_astra_decision({
+                    "decision_id": "decision-incomplete",
+                    "route": "USER", "reason": "Incomplete.", "user_request": invalid,
+                })
+        missing_context = dict(request)
+        del missing_context["exhaustion_context"]
+        with self.assertRaisesRegex(ValidationError, "requires exhaustion_context"):
+            validate_astra_decision({
+                "decision_id": "decision-no-context",
+                "route": "USER", "reason": "Incomplete.",
+                "user_request": missing_context,
+            })
+        four_attempts = dict(request, exhaustion_context={
+            **exhaustion_context(),
+            "attempts": exhaustion_context()["attempts"][:4],
+        })
+        with self.assertRaisesRegex(ValidationError, "exactly five attempts"):
+            validate_astra_decision({
+                "decision_id": "decision-four-attempts",
+                "route": "USER", "reason": "Incomplete.",
+                "user_request": four_attempts,
+            })
+        human_request = dict(request, category="AUTH_OR_HUMAN_ACTION_REQUIRED")
+        with self.assertRaisesRegex(ValidationError, "only valid"):
+            validate_astra_decision({
+                "decision_id": "decision-human-with-recovery",
+                "route": "USER", "reason": "Wrong payload.",
+                "user_request": human_request,
+            })
 
     def test_astra_may_attach_a_full_plan_revision_without_replacing_purpose(self):
         decision = {
@@ -574,6 +659,18 @@ class BundledJsonSchemaTests(unittest.TestCase):
         )
         fail_rule = reviewer["allOf"][1]["then"]["properties"]
         self.assertEqual(fail_rule["evidence_inspected"]["minItems"], 1)
+        decision_schema = json.loads(
+            schema_path("astra_decision").read_text(encoding="utf-8")
+        )
+        user_schema = decision_schema["$defs"]["userRequest"]
+        self.assertEqual(
+            user_schema["if"]["properties"]["category"]["const"],
+            "AUTOMATIC_RECOVERY_EXHAUSTED",
+        )
+        self.assertIn("exhaustion_context", user_schema["then"]["required"])
+        context_schema = user_schema["properties"]["exhaustion_context"]
+        self.assertEqual(context_schema["properties"]["attempts"]["minItems"], 5)
+        self.assertEqual(context_schema["properties"]["attempts"]["maxItems"], 5)
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ from astra_orchestrator.graph import (
     USAGE_LIMIT_STOP_CODE,
     initial_state,
 )
-from astra_orchestrator.schema import WorkflowState
+from astra_orchestrator.schema import ValidationError, WorkflowState
 
 
 class OrchestrationGraphTests(unittest.TestCase):
@@ -371,6 +371,26 @@ class OrchestrationGraphTests(unittest.TestCase):
             "category": "AUTOMATIC_RECOVERY_EXHAUSTED",
             "prompt": "This escalation is premature.",
             "required_actions": ["Should never be requested."],
+            "exhaustion_context": {
+                "problem": "The synthetic task is blocked.",
+                "why_blocked": "Automatic work appears exhausted.",
+                "attempts": [
+                    {
+                        "attempt": number,
+                        "strategy_id": f"premature-strategy-{number}",
+                        "route": "LUNA",
+                        "approach": f"Attempt {number}.",
+                        "outcome": "Did not resolve the issue.",
+                    }
+                    for number in range(1, 6)
+                ],
+                "current_state": {
+                    "stage_id": "verified", "target_stage": "verified",
+                    "plan_revision_id": "initial", "summary": "No recovery was actually attempted.",
+                },
+                "risks_and_impact": "A premature pause would waste user time.",
+                "resume_after_user": "Astra would evaluate the response.",
+            },
         }
         backend = ScriptedBackend({
             "astra": [
@@ -388,6 +408,61 @@ class OrchestrationGraphTests(unittest.TestCase):
         self.assertIsNone(state.get("pending_user_request"))
         self.assertIn("exactly five", state["last_error"]["message"])
         self.assertEqual(state["recovery_attempts"], [])
+
+    def test_exhaustion_request_must_match_persisted_attempts_and_stage(self) -> None:
+        spec, runtime = self.runtime("exhaustion-summary-binding", ScriptedBackend({}))
+        state = initial_state(spec, "exhaustion-summary-binding")
+        state["recovery_issue_id"] = "issue-1"
+        state["recovery_attempts"] = [
+            {
+                "issue_id": "issue-1", "attempt": number,
+                "strategy_id": f"strategy-{number}", "route": "LUNA",
+                "approach": f"Distinct attempt {number}.",
+                "outcome": f"Attempt {number} failed.", "status": "FAILED",
+            }
+            for number in range(1, 6)
+        ]
+        request = {
+            "category": "AUTOMATIC_RECOVERY_EXHAUSTED",
+            "exhaustion_context": {
+                "attempts": [
+                    {key: attempt[key] for key in (
+                        "attempt", "strategy_id", "route", "approach", "outcome"
+                    )}
+                    for attempt in state["recovery_attempts"]
+                ],
+                "current_state": {
+                    "stage_id": "verified", "target_stage": "verified",
+                    "plan_revision_id": "initial",
+                },
+            },
+        }
+        with runtime:
+            runtime._validate_user_route(state, request)
+            wrong_attempt = {
+                **request,
+                "exhaustion_context": {
+                    **request["exhaustion_context"],
+                    "attempts": [
+                        *request["exhaustion_context"]["attempts"][:4],
+                        {**request["exhaustion_context"]["attempts"][4], "outcome": "Invented success."},
+                    ],
+                },
+            }
+            with self.assertRaisesRegex(ValidationError, "persisted attempts"):
+                runtime._validate_user_route(state, wrong_attempt)
+            wrong_stage = {
+                **request,
+                "exhaustion_context": {
+                    **request["exhaustion_context"],
+                    "current_state": {
+                        **request["exhaustion_context"]["current_state"],
+                        "stage_id": "other-stage",
+                    },
+                },
+            }
+            with self.assertRaisesRegex(ValidationError, "current stage and plan"):
+                runtime._validate_user_route(state, wrong_stage)
 
     def test_successful_automatic_recovery_closes_issue_before_five(self) -> None:
         spec = _spec(self.project)
